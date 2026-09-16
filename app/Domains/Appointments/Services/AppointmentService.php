@@ -1,0 +1,589 @@
+<?php
+
+namespace App\Domains\Appointments\Services;
+
+use App\Domains\Appointments\Enums\AppointmentStatus;
+use App\Domains\Appointments\Enums\AppointmentType;
+use App\Domains\Appointments\Models\Appointment;
+use App\Domains\Appointments\Repositories\Contracts\AppointmentRepository;
+use App\Domains\Audits\Data\AuditContext;
+use App\Domains\Audits\Services\AuditService;
+use App\Domains\Organizations\Enums\OrganizationStatus;
+use App\Domains\Organizations\Models\Location;
+use App\Domains\Patients\Enums\PatientStatus;
+use App\Domains\Patients\Models\Patient;
+use App\Domains\Professionals\Enums\ProfessionalStatus;
+use App\Domains\Professionals\Models\Professional;
+use App\Domains\Professionals\Models\ProfessionalSchedule;
+use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Models\User;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+
+class AppointmentService
+{
+    public function __construct(
+        private AppointmentRepository $appointments,
+        private AuditService $audit,
+    ) {}
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, Appointment>
+     */
+    public function paginate(
+        array $filters,
+        int $perPage,
+        ?int $professionalId,
+    ): LengthAwarePaginator {
+        $normalizedFilters = Arr::only($filters, [
+            'date',
+            'status',
+            'type',
+            'location_id',
+            'professional_id',
+            'search',
+        ]);
+
+        if (isset($normalizedFilters['search'])) {
+            $normalizedFilters['search'] = Str::squish(
+                (string) $normalizedFilters['search'],
+            );
+        }
+
+        if ($professionalId !== null) {
+            $normalizedFilters['professional_id'] = $professionalId;
+        }
+
+        return $this->appointments->paginate(
+            array_filter(
+                $normalizedFilters,
+                fn (mixed $value): bool => $value !== null && $value !== '',
+            ),
+            min(max($perPage, 1), 100),
+            $professionalId,
+        );
+    }
+
+    /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
+    public function summaries(?int $professionalId): array
+    {
+        return $this->appointments->summaries($professionalId);
+    }
+
+    public function find(int $id): Appointment
+    {
+        return $this->appointments->findOrFail($id);
+    }
+
+    public function professionalScopeFor(User $user): ?int
+    {
+        if (! $user->hasRole(RoleCode::Professional)) {
+            return null;
+        }
+
+        return $this->appointments->professionalIdForUser((int) $user->getKey()) ?? 0;
+    }
+
+    /** @return Collection<int, Patient> */
+    public function availablePatients(): Collection
+    {
+        return $this->appointments->availablePatients();
+    }
+
+    /** @return Collection<int, Professional> */
+    public function activeProfessionals(?int $professionalId = null): Collection
+    {
+        return $this->appointments->activeProfessionals($professionalId);
+    }
+
+    /** @return Collection<int, Location> */
+    public function activeLocations(): Collection
+    {
+        return $this->appointments->activeLocations();
+    }
+
+    /** @param array<string, mixed> $data */
+    public function create(
+        array $data,
+        User $actor,
+        AuditContext $auditContext,
+    ): Appointment {
+        return DB::transaction(function () use ($data, $actor, $auditContext): Appointment {
+            [$patient, $professional, $location] = $this->lockReferences($data);
+            [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
+                $data,
+                $professional,
+                $location,
+            );
+            $office = $this->appointmentOffice($data, $professional);
+
+            $this->ensureCanSchedule(
+                $patient,
+                $professional,
+                $location,
+                $startsAt,
+                $endsAt,
+                $office,
+            );
+
+            $appointment = $this->appointments->create(
+                $this->appointmentAttributes(
+                    $data,
+                    $startsAt,
+                    $endsAt,
+                    $durationMinutes,
+                    $office,
+                ),
+            );
+
+            $this->audit->record(
+                event: 'appointment.created',
+                auditable: $appointment,
+                afterValues: $this->auditSnapshot($appointment),
+                actor: $actor,
+                context: $auditContext,
+            );
+
+            return $appointment;
+        }, 3);
+    }
+
+    /** @param array<string, mixed> $data */
+    public function update(
+        Appointment $appointment,
+        array $data,
+        User $actor,
+        AuditContext $auditContext,
+    ): Appointment {
+        return DB::transaction(function () use (
+            $appointment,
+            $data,
+            $actor,
+            $auditContext,
+        ): Appointment {
+            $lockedAppointment = $this->lockCurrentVersion(
+                $appointment,
+                (int) $data['lock_version'],
+            );
+
+            if (! in_array($lockedAppointment->status, [
+                AppointmentStatus::Reserved,
+                AppointmentStatus::Confirmed,
+            ], true)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Sólo pueden reprogramarse turnos reservados o confirmados.',
+                ]);
+            }
+
+            [$patient, $professional, $location] = $this->lockReferences($data);
+            [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
+                $data,
+                $professional,
+                $location,
+            );
+            $office = $this->appointmentOffice($data, $professional);
+
+            $this->ensureCanSchedule(
+                $patient,
+                $professional,
+                $location,
+                $startsAt,
+                $endsAt,
+                $office,
+                (int) $lockedAppointment->getKey(),
+            );
+
+            $beforeValues = $this->auditSnapshot($lockedAppointment);
+            $updatedAppointment = $this->appointments->update(
+                $lockedAppointment,
+                [
+                    ...$this->appointmentAttributes(
+                        $data,
+                        $startsAt,
+                        $endsAt,
+                        $durationMinutes,
+                        $office,
+                    ),
+                    'status' => $lockedAppointment->status,
+                    'lock_version' => $lockedAppointment->lock_version + 1,
+                ],
+            );
+
+            $this->audit->record(
+                event: 'appointment.updated',
+                auditable: $updatedAppointment,
+                beforeValues: $beforeValues,
+                afterValues: $this->auditSnapshot($updatedAppointment),
+                actor: $actor,
+                context: $auditContext,
+            );
+
+            return $updatedAppointment;
+        }, 3);
+    }
+
+    public function changeStatus(
+        Appointment $appointment,
+        AppointmentStatus $status,
+        int $lockVersion,
+        User $actor,
+        AuditContext $auditContext,
+    ): Appointment {
+        return DB::transaction(function () use (
+            $appointment,
+            $status,
+            $lockVersion,
+            $actor,
+            $auditContext,
+        ): Appointment {
+            $lockedAppointment = $this->lockCurrentVersion($appointment, $lockVersion);
+
+            if ($status === AppointmentStatus::Cancelled) {
+                throw ValidationException::withMessages([
+                    'status' => 'La cancelación debe realizarse mediante la acción específica.',
+                ]);
+            }
+
+            if (! in_array(
+                $status,
+                $lockedAppointment->status->availableTransitions(),
+                true,
+            )) {
+                throw ValidationException::withMessages([
+                    'status' => 'El cambio de estado solicitado no está permitido.',
+                ]);
+            }
+
+            $beforeValues = $this->auditSnapshot($lockedAppointment);
+            $updatedAppointment = $this->appointments->update(
+                $lockedAppointment,
+                [
+                    'status' => $status,
+                    'lock_version' => $lockedAppointment->lock_version + 1,
+                ],
+            );
+
+            $this->audit->record(
+                event: 'appointment.status_changed',
+                auditable: $updatedAppointment,
+                beforeValues: $beforeValues,
+                afterValues: $this->auditSnapshot($updatedAppointment),
+                actor: $actor,
+                context: $auditContext,
+            );
+
+            return $updatedAppointment;
+        }, 3);
+    }
+
+    public function cancel(
+        Appointment $appointment,
+        string $cancellationReason,
+        int $lockVersion,
+        User $actor,
+        AuditContext $auditContext,
+    ): Appointment {
+        return DB::transaction(function () use (
+            $appointment,
+            $cancellationReason,
+            $lockVersion,
+            $actor,
+            $auditContext,
+        ): Appointment {
+            $lockedAppointment = $this->lockCurrentVersion($appointment, $lockVersion);
+
+            if (! $lockedAppointment->status->isCancellable()) {
+                throw ValidationException::withMessages([
+                    'status' => 'El turno ya no admite cancelación.',
+                ]);
+            }
+
+            if ($lockedAppointment->starts_at->lt(now()->addHours(24))) {
+                throw ValidationException::withMessages([
+                    'cancellation_reason' => 'Los turnos sólo pueden cancelarse con al menos 24 horas de anticipación.',
+                ]);
+            }
+
+            $beforeValues = $this->auditSnapshot($lockedAppointment);
+            $cancelledAppointment = $this->appointments->update(
+                $lockedAppointment,
+                [
+                    'status' => AppointmentStatus::Cancelled,
+                    'cancellation_reason' => Str::squish($cancellationReason),
+                    'cancelled_at' => now(),
+                    'cancelled_by' => $actor->getKey(),
+                    'lock_version' => $lockedAppointment->lock_version + 1,
+                ],
+            );
+
+            $this->audit->record(
+                event: 'appointment.cancelled',
+                auditable: $cancelledAppointment,
+                beforeValues: $beforeValues,
+                afterValues: $this->auditSnapshot($cancelledAppointment),
+                actor: $actor,
+                context: $auditContext,
+            );
+
+            return $cancelledAppointment;
+        }, 3);
+    }
+
+    /** @param array<string, mixed> $data */
+    private function lockReferences(array $data): array
+    {
+        return [
+            $this->appointments->lockPatient((int) $data['patient_id']),
+            $this->appointments->lockProfessional((int) $data['professional_id']),
+            $this->appointments->lockLocation((int) $data['location_id']),
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}
+     */
+    private function appointmentWindow(
+        array $data,
+        Professional $professional,
+        Location $location,
+    ): array {
+        $durationMinutes = (int) $professional->appointment_duration_minutes;
+
+        if ($durationMinutes < 1 || $durationMinutes > 480) {
+            throw ValidationException::withMessages([
+                'professional_id' => 'El profesional no tiene una duración de turno válida.',
+            ]);
+        }
+
+        $startsAt = CarbonImmutable::parse(
+            (string) $data['starts_at'],
+            $location->timezone ?: config('app.timezone'),
+        );
+        $endsAt = $startsAt->addMinutes($durationMinutes);
+
+        if (! $startsAt->isFuture()) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El turno debe programarse para una fecha y hora futuras.',
+            ]);
+        }
+
+        return [$startsAt, $endsAt, $durationMinutes];
+    }
+
+    private function ensureCanSchedule(
+        Patient $patient,
+        Professional $professional,
+        Location $location,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+        ?string $office,
+        ?int $exceptAppointmentId = null,
+    ): void {
+        if (! in_array($patient->status, [
+            PatientStatus::Active,
+            PatientStatus::Inpatient,
+        ], true)) {
+            throw ValidationException::withMessages([
+                'patient_id' => 'El paciente no está habilitado para recibir turnos.',
+            ]);
+        }
+
+        if ($professional->status !== ProfessionalStatus::Active) {
+            throw ValidationException::withMessages([
+                'professional_id' => 'El profesional seleccionado no está activo.',
+            ]);
+        }
+
+        if ($location->status !== OrganizationStatus::Active) {
+            throw ValidationException::withMessages([
+                'location_id' => 'La sede seleccionada no está activa.',
+            ]);
+        }
+
+        $this->ensureWithinLocationHours($location, $startsAt, $endsAt);
+        $this->ensureWithinProfessionalSchedule(
+            $professional,
+            $location,
+            $startsAt,
+            $endsAt,
+        );
+
+        if ($this->appointments->hasProfessionalConflict(
+            (int) $professional->getKey(),
+            $startsAt,
+            $endsAt,
+            $exceptAppointmentId,
+        )) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El profesional ya tiene un turno que se superpone en ese horario.',
+            ]);
+        }
+
+        if ($this->appointments->hasPatientConflict(
+            (int) $patient->getKey(),
+            $startsAt,
+            $endsAt,
+            $exceptAppointmentId,
+        )) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El paciente ya tiene un turno que se superpone en ese horario.',
+            ]);
+        }
+
+        if ($office !== null && $this->appointments->hasOfficeConflict(
+            (int) $location->getKey(),
+            $office,
+            $startsAt,
+            $endsAt,
+            $exceptAppointmentId,
+        )) {
+            throw ValidationException::withMessages([
+                'office' => 'El consultorio ya está ocupado durante ese horario.',
+            ]);
+        }
+    }
+
+    private function ensureWithinLocationHours(
+        Location $location,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+    ): void {
+        $startTime = $startsAt->format('H:i:s');
+        $endTime = $endsAt->format('H:i:s');
+        $openingTime = $this->normalizedTime($location->opening_time);
+        $closingTime = $this->normalizedTime($location->closing_time);
+
+        if ($startTime < $openingTime || $endTime > $closingTime) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El turno debe quedar dentro del horario operativo de la sede.',
+            ]);
+        }
+    }
+
+    private function ensureWithinProfessionalSchedule(
+        Professional $professional,
+        Location $location,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+    ): void {
+        $normalizedLocationName = Str::lower(Str::squish($location->name));
+        $startTime = $startsAt->format('H:i:s');
+        $endTime = $endsAt->format('H:i:s');
+        $matchesSchedule = $professional->schedules()
+            ->where('weekday', $startsAt->dayOfWeekIso)
+            ->get(['location_id', 'location_name', 'start_time', 'end_time'])
+            ->contains(
+                fn (ProfessionalSchedule $schedule): bool => (
+                    $schedule->location_id !== null
+                        ? $schedule->location_id === (int) $location->getKey()
+                        : Str::lower(
+                            Str::squish($schedule->location_name),
+                        ) === $normalizedLocationName
+                )
+                    && $startTime >= $this->normalizedTime($schedule->start_time)
+                    && $endTime <= $this->normalizedTime($schedule->end_time),
+            );
+
+        if (! $matchesSchedule) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El horario no pertenece a la agenda del profesional en la sede seleccionada.',
+            ]);
+        }
+    }
+
+    private function lockCurrentVersion(
+        Appointment $appointment,
+        int $lockVersion,
+    ): Appointment {
+        $lockedAppointment = $this->appointments->lockForUpdate($appointment);
+
+        if ($lockedAppointment->lock_version !== $lockVersion) {
+            throw ValidationException::withMessages([
+                'lock_version' => 'El turno fue modificado por otro usuario. Recargá la página antes de continuar.',
+            ]);
+        }
+
+        return $lockedAppointment;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    private function appointmentAttributes(
+        array $data,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+        int $durationMinutes,
+        ?string $office,
+    ): array {
+        $type = AppointmentType::from((string) $data['type']);
+
+        return [
+            'patient_id' => (int) $data['patient_id'],
+            'professional_id' => (int) $data['professional_id'],
+            'location_id' => (int) $data['location_id'],
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+            'duration_minutes' => $durationMinutes,
+            'type' => $type,
+            'status' => AppointmentStatus::Reserved,
+            'office' => $office,
+            'reason' => $this->nullableString($data['reason'] ?? null),
+            'is_overbook' => false,
+            'lock_version' => 1,
+        ];
+    }
+
+    /** @param array<string, mixed> $data */
+    private function appointmentOffice(
+        array $data,
+        Professional $professional,
+    ): ?string {
+        if (AppointmentType::from((string) $data['type']) === AppointmentType::Virtual) {
+            return null;
+        }
+
+        return $this->nullableString($data['office'] ?? null)
+            ?? $this->nullableString($professional->fixed_office);
+    }
+
+    /** @return array<string, mixed> */
+    private function auditSnapshot(Appointment $appointment): array
+    {
+        return [
+            'patient_id' => $appointment->patient_id,
+            'professional_id' => $appointment->professional_id,
+            'location_id' => $appointment->location_id,
+            'starts_at' => $appointment->starts_at->toISOString(),
+            'ends_at' => $appointment->ends_at->toISOString(),
+            'duration_minutes' => $appointment->duration_minutes,
+            'type' => $appointment->type->value,
+            'status' => $appointment->status->value,
+            'office' => $appointment->office,
+            'is_overbook' => $appointment->is_overbook,
+            'cancelled_at' => $appointment->cancelled_at?->toISOString(),
+            'cancelled_by' => $appointment->cancelled_by,
+            'has_cancellation_reason' => filled($appointment->cancellation_reason),
+            'lock_version' => $appointment->lock_version,
+        ];
+    }
+
+    private function normalizedTime(string $time): string
+    {
+        return Str::length($time) === 5 ? "$time:00" : $time;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        return filled($value) ? Str::squish((string) $value) : null;
+    }
+}

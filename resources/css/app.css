@@ -1,0 +1,54 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../js/**/*.vue';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-clinic-50: oklch(0.97 0.02 252);
+    --color-clinic-100: oklch(0.93 0.04 252);
+    --color-clinic-200: oklch(0.87 0.08 252);
+    --color-clinic-300: oklch(0.79 0.12 252);
+    --color-clinic-400: oklch(0.69 0.17 255);
+    --color-clinic-500: oklch(0.6 0.21 258);
+    --color-clinic-600: oklch(0.53 0.23 261);
+    --color-clinic-700: oklch(0.46 0.21 263);
+    --color-clinic-800: oklch(0.39 0.17 264);
+    --color-clinic-900: oklch(0.33 0.13 265);
+    --color-clinic-950: oklch(0.24 0.1 266);
+    --shadow-card: 0 1px 2px rgb(15 23 42 / 0.03), 0 12px 32px rgb(15 23 42 / 0.06);
+}
+
+@layer base {
+    :root {
+        color-scheme: light;
+    }
+
+    :root.dark {
+        color-scheme: dark;
+    }
+
+    html {
+        @apply scroll-smooth;
+    }
+
+    body {
+        @apply min-w-80 text-slate-900 dark:text-slate-100;
+    }
+
+    button,
+    a,
+    input,
+    select,
+    textarea {
+        @apply focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600;
+    }
+
+    ::selection {
+        @apply bg-clinic-200 text-clinic-950 dark:bg-clinic-700 dark:text-white;
+    }
+}
