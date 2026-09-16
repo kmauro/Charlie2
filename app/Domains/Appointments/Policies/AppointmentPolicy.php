@@ -2,30 +2,27 @@
 
 namespace App\Domains\Appointments\Policies;
 
+use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\User;
 
 class AppointmentPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $this->hasAnyRole($user, [
-            RoleCode::SuperAdmin,
-            RoleCode::Administrator,
-            RoleCode::Manager,
-            RoleCode::Supervisor,
-            RoleCode::Reception,
-            RoleCode::Professional,
-            RoleCode::Nursing,
-            RoleCode::Emergency,
-        ]);
+        return $user->hasPermission(UserPermission::ManageAppointments);
     }
 
     public function view(User $user, Appointment $appointment): bool
     {
         if (! $this->viewAny($user)) {
             return false;
+        }
+
+        if ($user->hasRole(RoleCode::SuperAdmin)) {
+            return true;
         }
 
         if (! $user->hasRole(RoleCode::Professional)) {
@@ -39,27 +36,28 @@ class AppointmentPolicy
 
     public function create(User $user): bool
     {
-        return $this->canManage($user);
+        return $this->canAdministrativelyManage($user);
     }
 
     public function update(User $user, Appointment $appointment): bool
     {
-        return $this->canManage($user)
+        return $this->canAdministrativelyManage($user)
             && in_array($appointment->status, [
-                \App\Domains\Appointments\Enums\AppointmentStatus::Reserved,
-                \App\Domains\Appointments\Enums\AppointmentStatus::Confirmed,
+                AppointmentStatus::Reserved,
+                AppointmentStatus::Confirmed,
             ], true);
     }
 
     public function changeStatus(User $user, Appointment $appointment): bool
     {
         return $this->canManage($user)
+            && $this->isOwnedByProfessionalWhenRequired($user, $appointment)
             && $appointment->status->availableTransitions() !== [];
     }
 
     public function cancel(User $user, Appointment $appointment): bool
     {
-        return $this->canManage($user);
+        return $this->canAdministrativelyManage($user);
     }
 
     public function delete(User $user, Appointment $appointment): bool
@@ -79,24 +77,22 @@ class AppointmentPolicy
 
     private function canManage(User $user): bool
     {
-        return $this->hasAnyRole($user, [
-            RoleCode::SuperAdmin,
-            RoleCode::Administrator,
-            RoleCode::Manager,
-            RoleCode::Supervisor,
-            RoleCode::Reception,
-        ]);
+        return $user->hasPermission(UserPermission::ManageAppointments);
     }
 
-    /** @param array<int, RoleCode> $roles */
-    private function hasAnyRole(User $user, array $roles): bool
+    private function canAdministrativelyManage(User $user): bool
     {
-        foreach ($roles as $role) {
-            if ($user->hasRole($role)) {
-                return true;
-            }
-        }
+        return $this->canManage($user)
+            && ! $user->hasRole(RoleCode::Professional);
+    }
 
-        return false;
+    private function isOwnedByProfessionalWhenRequired(
+        User $user,
+        Appointment $appointment,
+    ): bool {
+        return ! $user->hasRole(RoleCode::Professional)
+            || $appointment->professional()
+                ->where('user_id', $user->getKey())
+                ->exists();
     }
 }

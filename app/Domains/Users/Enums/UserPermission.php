@@ -10,6 +10,39 @@ enum UserPermission: string
     case ViewAccounting = 'view_accounting';
     case ExportAudit = 'export_audit';
 
+    /** @return array<int, RoleCode> */
+    public function allowedRoles(): array
+    {
+        return match ($this) {
+            self::ManageAppointments => [
+                RoleCode::Administrator,
+                RoleCode::Supervisor,
+                RoleCode::Reception,
+                RoleCode::Professional,
+            ],
+            self::RecordPayments => [
+                RoleCode::Administrator,
+                RoleCode::Supervisor,
+                RoleCode::Reception,
+                RoleCode::Sales,
+            ],
+            self::AccessExternalClinicalRecord => [
+                RoleCode::Supervisor,
+                RoleCode::Professional,
+            ],
+            self::ViewAccounting => [
+                RoleCode::Manager,
+                RoleCode::Accounting,
+            ],
+            self::ExportAudit => [RoleCode::Auditor],
+        };
+    }
+
+    public function isAllowedFor(RoleCode $role): bool
+    {
+        return in_array($role, $this->allowedRoles(), true);
+    }
+
     public function label(): string
     {
         return match ($this) {
@@ -33,7 +66,7 @@ enum UserPermission: string
     }
 
     /**
-     * @return array<int, array{value: string, label: string, description: string}>
+     * @return array<int, array{value: string, label: string, description: string, allowed_roles: array<int, string>}>
      */
     public static function options(): array
     {
@@ -42,6 +75,10 @@ enum UserPermission: string
                 'value' => $permission->value,
                 'label' => $permission->label(),
                 'description' => $permission->description(),
+                'allowed_roles' => array_map(
+                    fn (RoleCode $role): string => $role->value,
+                    $permission->allowedRoles(),
+                ),
             ],
             self::cases(),
         );

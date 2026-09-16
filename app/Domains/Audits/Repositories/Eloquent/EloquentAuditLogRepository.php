@@ -4,6 +4,7 @@ namespace App\Domains\Audits\Repositories\Eloquent;
 
 use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Audits\Repositories\Contracts\AuditLogRepository;
+use DateTimeInterface;
 
 class EloquentAuditLogRepository implements AuditLogRepository
 {
@@ -25,5 +26,15 @@ class EloquentAuditLogRepository implements AuditLogRepository
     public function create(array $attributes): AuditLog
     {
         return AuditLog::query()->create($attributes);
+    }
+
+    public function countCreatedBefore(DateTimeInterface $cutoff): int
+    {
+        return AuditLog::query()->where('created_at', '<', $cutoff)->count();
+    }
+
+    public function deleteCreatedBefore(DateTimeInterface $cutoff): int
+    {
+        return AuditLog::query()->where('created_at', '<', $cutoff)->toBase()->delete();
     }
 }

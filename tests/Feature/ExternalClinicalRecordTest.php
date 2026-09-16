@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Patients\Models\Patient;
@@ -23,7 +24,11 @@ function externalClinicalRecordProfessional(Patient $patient): Professional
     Appointment::factory()
         ->for($patient)
         ->for($professional)
-        ->create();
+        ->create([
+            'starts_at' => now()->addHour(),
+            'ends_at' => now()->addMinutes(90),
+            'status' => AppointmentStatus::Confirmed,
+        ]);
 
     return $professional->load('user');
 }

@@ -13,6 +13,7 @@ use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
 use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use Carbon\CarbonInterface;
@@ -27,6 +28,9 @@ function appointmentsActor(RoleCode $role): User
 {
     return User::factory()->create([
         'role_id' => Role::query()->where('code', $role->value)->value('id'),
+        'permissions' => UserPermission::ManageAppointments->isAllowedFor($role)
+            ? [UserPermission::ManageAppointments->value]
+            : [],
     ]);
 }
 
@@ -84,7 +88,6 @@ it('applies the appointment role matrix and never permits deletion', function ()
     foreach ([
         RoleCode::SuperAdmin,
         RoleCode::Administrator,
-        RoleCode::Manager,
         RoleCode::Supervisor,
         RoleCode::Reception,
     ] as $role) {
@@ -99,16 +102,22 @@ it('applies the appointment role matrix and never permits deletion', function ()
     }
 
     foreach ([
-        RoleCode::Professional,
         RoleCode::Nursing,
         RoleCode::Emergency,
+        RoleCode::Manager,
     ] as $role) {
         $actor = appointmentsActor($role);
 
-        expect($actor->can('viewAny', Appointment::class))->toBeTrue()
+        expect($actor->can('viewAny', Appointment::class))->toBeFalse()
             ->and($actor->can('create', Appointment::class))->toBeFalse()
             ->and($actor->can('update', $appointment))->toBeFalse();
     }
+
+    $professional = Professional::factory()->create();
+
+    expect($professional->user->can('viewAny', Appointment::class))->toBeTrue()
+        ->and($professional->user->can('create', Appointment::class))->toBeFalse()
+        ->and($professional->user->can('update', $appointment))->toBeFalse();
 
     foreach ([
         RoleCode::Accounting,
@@ -379,7 +388,7 @@ it('allows adjacent appointments because they do not overlap', function () {
 });
 
 it('updates atomically and rejects a stale lock version', function () {
-    $actor = appointmentsActor(RoleCode::Manager);
+    $actor = appointmentsActor(RoleCode::Administrator);
     $context = appointmentSchedulingContext(45);
     $appointment = Appointment::factory()->create([
         'patient_id' => $context['patient'],

@@ -3,6 +3,7 @@
 namespace App\Domains\Users\Database\Factories;
 
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
@@ -34,7 +35,7 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'status' => UserStatus::Active,
-            'permissions' => [],
+            'permissions' => [UserPermission::ManageAppointments->value],
             'remember_token' => Str::random(10),
             'invitation_accepted_at' => now(),
         ];

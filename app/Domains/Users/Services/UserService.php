@@ -2,8 +2,11 @@
 
 namespace App\Domains\Users\Services;
 
+use App\Domains\Audits\Data\AuditContext;
+use App\Domains\Audits\Services\AuditService;
 use App\Domains\Users\Data\InvitationResult;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Mail\UserInvitationMail;
 use App\Domains\Users\Models\User;
@@ -23,6 +26,7 @@ class UserService
     public function __construct(
         private UserRepository $users,
         private RoleRepository $roles,
+        private AuditService $audit,
     ) {}
 
     /**
@@ -75,6 +79,11 @@ class UserService
             ]);
         }
 
+        $permissions = $this->validatedPermissions(
+            $role->code,
+            $data['permissions'] ?? [],
+        );
+
         $expiresAt = now()->addHours((int) ($data['expires_in_hours'] ?? 48));
         $token = Str::random(64);
 
@@ -84,10 +93,12 @@ class UserService
             'email' => $data['email'],
             'password' => Str::random(64),
             'status' => UserStatus::PendingInvitation,
-            'permissions' => $data['permissions'] ?? [],
+            'permissions' => $permissions,
             'invitation_token_hash' => hash('sha256', $token),
             'invitation_expires_at' => $expiresAt,
         ]);
+
+        $this->recordUserEvent('user.invited', $user);
 
         return $this->sendInvitation($user, $token, $expiresAt);
     }
@@ -100,13 +111,20 @@ class UserService
         $attributes = Arr::only($data, ['name', 'email', 'role_id', 'permissions']);
 
         if (! array_key_exists('role_id', $attributes)) {
-            return $this->users->update($user, $attributes);
+            $updatedUser = $this->users->update($user, $attributes);
+            $this->recordUserEvent('user.updated', $updatedUser);
+
+            return $updatedUser;
         }
 
         return DB::transaction(function () use ($user, $attributes): User {
             $this->users->lockActiveByRole(RoleCode::SuperAdmin);
             $lockedUser = $this->users->findForUpdate((int) $user->getKey());
             $nextRole = $this->roles->find((int) $attributes['role_id']);
+            $attributes['permissions'] = $this->validatedPermissions(
+                $nextRole->code,
+                $attributes['permissions'] ?? [],
+            );
 
             $this->guardLastActiveSuperAdmin(
                 user: $lockedUser,
@@ -133,7 +151,10 @@ class UserService
                 ]);
             }
 
-            return $this->users->update($lockedUser, $attributes);
+            $updatedUser = $this->users->update($lockedUser, $attributes);
+            $this->recordUserEvent('user.updated', $updatedUser);
+
+            return $updatedUser;
         }, attempts: 3);
     }
 
@@ -200,11 +221,15 @@ class UserService
 
     private function suspendUser(User $user): User
     {
-        return $this->users->update($user, [
+        $suspendedUser = $this->users->update($user, [
             'status' => UserStatus::Suspended,
             'invitation_token_hash' => null,
             'invitation_expires_at' => null,
         ]);
+
+        $this->recordUserEvent('user.suspended', $suspendedUser);
+
+        return $suspendedUser;
     }
 
     public function restore(User $user): User
@@ -231,11 +256,15 @@ class UserService
 
     private function restoreAccount(User $user): User
     {
-        return $this->users->update($user, [
+        $restoredUser = $this->users->update($user, [
             'status' => $user->invitation_accepted_at === null
                 ? UserStatus::PendingInvitation
                 : UserStatus::Active,
         ]);
+
+        $this->recordUserEvent('user.restored', $restoredUser);
+
+        return $restoredUser;
     }
 
     public function reinvite(User $user, int $expiresInHours = 48): InvitationResult
@@ -260,6 +289,8 @@ class UserService
             'invitation_token_hash' => hash('sha256', $token),
             'invitation_expires_at' => $expiresAt,
         ]);
+
+        $this->recordUserEvent('user.reinvited', $user);
 
         return $this->sendInvitation($user, $token, $expiresAt);
     }
@@ -361,6 +392,43 @@ class UserService
         return new InvitationResult(
             user: $user,
             invitationUrl: $invitationUrl,
+        );
+    }
+
+    /**
+     * @param  array<int, string>  $permissions
+     * @return array<int, string>
+     */
+    private function validatedPermissions(
+        RoleCode $role,
+        array $permissions,
+    ): array {
+        if ($role === RoleCode::SuperAdmin) {
+            return [];
+        }
+
+        foreach ($permissions as $permissionValue) {
+            $permission = UserPermission::from($permissionValue);
+
+            if (! $permission->isAllowedFor($role)) {
+                throw ValidationException::withMessages([
+                    'permissions' => 'Uno o más permisos no corresponden al rol seleccionado.',
+                ]);
+            }
+        }
+
+        return array_values(array_unique($permissions));
+    }
+
+    private function recordUserEvent(string $event, User $user): void
+    {
+        $actor = Auth::user();
+
+        $this->audit->record(
+            event: $event,
+            auditable: $user,
+            actor: $actor instanceof User ? $actor : null,
+            context: AuditContext::fromRequest(),
         );
     }
 }

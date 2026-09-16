@@ -7,7 +7,7 @@ import type {
 import BaseIcon from '@/shared/components/BaseIcon.vue';
 import FieldError from '@/shared/components/FieldError.vue';
 import { Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps<{
     mode: 'create' | 'edit';
@@ -39,6 +39,14 @@ const form = useForm<UserFormValues>({
 });
 
 const isEditing = computed(() => props.mode === 'edit');
+const selectedRoleCode = computed(
+    () => props.roles.find((role) => role.id === form.role_id)?.code ?? '',
+);
+const availablePermissionOptions = computed(() =>
+    props.permissionOptions.filter((permission) =>
+        permission.allowed_roles.includes(selectedRoleCode.value),
+    ),
+);
 const submitLabel = computed(() =>
     isEditing.value ? 'Guardar cambios' : 'Enviar invitación',
 );
@@ -54,6 +62,15 @@ const submit = (): void => {
 
     form.post(props.endpoint);
 };
+
+watch(selectedRoleCode, () => {
+    const availableValues = new Set(
+        availablePermissionOptions.value.map((permission) => permission.value),
+    );
+    form.permissions = form.permissions.filter((permission) =>
+        availableValues.has(permission),
+    );
+});
 </script>
 
 <template>
@@ -231,16 +248,16 @@ const submit = (): void => {
 
                 <fieldset>
                     <legend class="text-sm font-semibold text-slate-950 dark:text-white">
-                        Excepciones de permisos
+                        Permisos individuales
                     </legend>
                     <p class="pt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                        El rol define la base. Marcá solamente los permisos
-                        individuales que deban agregarse.
+                        El rol define el máximo permitido. Marcá las capacidades
+                        que esta cuenta podrá utilizar.
                     </p>
 
                     <div class="grid gap-3 pt-4 sm:grid-cols-2">
                         <label
-                            v-for="permission in permissionOptions"
+                            v-for="permission in availablePermissionOptions"
                             :key="permission.value"
                             class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-clinic-300 hover:bg-clinic-50/50 dark:border-slate-700 dark:hover:border-clinic-700 dark:hover:bg-clinic-400/5"
                         >
@@ -265,6 +282,12 @@ const submit = (): void => {
                             </span>
                         </label>
                     </div>
+                    <p
+                        v-if="availablePermissionOptions.length === 0"
+                        class="pt-4 text-sm text-slate-500 dark:text-slate-400"
+                    >
+                        El rol seleccionado no admite permisos individuales.
+                    </p>
                     <FieldError :message="form.errors.permissions" class="pt-3" />
                 </fieldset>
             </div>
@@ -325,7 +348,7 @@ const submit = (): void => {
                     </li>
                     <li class="flex gap-2">
                         <span aria-hidden="true">•</span>
-                        Los permisos individuales complementan al rol asignado.
+                        Los permisos individuales nunca amplían el máximo del rol.
                     </li>
                     <li class="flex gap-2">
                         <span aria-hidden="true">•</span>

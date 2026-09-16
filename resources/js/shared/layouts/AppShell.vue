@@ -116,6 +116,12 @@ const navigationItems = [
             'supervisor',
         ],
     },
+    {
+        label: 'Auditoría',
+        href: '/auditoria',
+        icon: 'shield-check',
+        allowedRoles: ['auditor'],
+    },
 ];
 const navigation = computed(() =>
     navigationItems.filter(

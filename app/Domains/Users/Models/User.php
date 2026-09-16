@@ -2,15 +2,20 @@
 
 namespace App\Domains\Users\Models;
 
+use App\Domains\Audits\Models\AuditLog;
+use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Database\Factories\UserFactory;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -55,9 +60,34 @@ class User extends Authenticatable
         return $this->hasOne(Patient::class);
     }
 
+    /** @return BelongsToMany<Location, $this> */
+    public function locations(): BelongsToMany
+    {
+        return $this->belongsToMany(Location::class)->withTimestamps();
+    }
+
+    /** @return HasMany<AuditLog, $this> */
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(AuditLog::class, 'actor_id');
+    }
+
     public function hasRole(RoleCode $role): bool
     {
         return $this->role?->code === $role;
+    }
+
+    public function hasPermission(UserPermission $permission): bool
+    {
+        if ($this->hasRole(RoleCode::SuperAdmin)) {
+            return true;
+        }
+
+        $role = $this->role?->code;
+
+        return $role !== null
+            && $permission->isAllowedFor($role)
+            && in_array($permission->value, $this->permissions ?? [], true);
     }
 
     public function isActive(): bool

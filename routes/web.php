@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Appointments\Controllers\AppointmentController;
+use App\Domains\Audits\Controllers\AuditLogController;
 use App\Domains\Auth\Controllers\AuthenticatedSessionController;
 use App\Domains\Auth\Controllers\RegisteredUserController;
 use App\Domains\Auth\Middleware\EnsureUserIsActive;
@@ -31,6 +32,11 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    Route::controller(AuditLogController::class)->prefix('auditoria')->name('audits.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::get('/exportar', 'export')->name('export');
+    });
 
     Route::controller(UserController::class)->prefix('usuarios')->name('users.')->group(function (): void {
         Route::get('/', 'index')->name('index');

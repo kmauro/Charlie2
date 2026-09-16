@@ -2,17 +2,21 @@
 
 namespace App\Domains\Professionals\Services;
 
+use App\Domains\Audits\Data\AuditContext;
+use App\Domains\Audits\Services\AuditService;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Professionals\Enums\OfficeAssignmentType;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Repositories\Contracts\ProfessionalRepository;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +26,7 @@ class ProfessionalService
     public function __construct(
         private ProfessionalRepository $professionals,
         private UserService $users,
+        private AuditService $audit,
     ) {}
 
     /**
@@ -65,7 +70,10 @@ class ProfessionalService
             $invitation = $this->users->inviteProfessional([
                 'name' => Str::squish($data['name']),
                 'email' => Str::lower(trim($data['email'])),
-                'permissions' => [],
+                'permissions' => [
+                    UserPermission::ManageAppointments->value,
+                    UserPermission::AccessExternalClinicalRecord->value,
+                ],
                 'expires_in_hours' => (int) ($data['expires_in_hours'] ?? 72),
             ]);
 
@@ -77,6 +85,8 @@ class ProfessionalService
                 ],
                 $this->scheduleAttributes($data['schedules']),
             );
+
+            $this->recordProfessionalEvent('professional.created', $professional);
 
             return [
                 'professional' => $professional,
@@ -110,12 +120,15 @@ class ProfessionalService
                 );
             }
 
+            $updatedProfessional = $this->professionals->update(
+                $professional,
+                $this->professionalAttributes($data),
+                $this->scheduleAttributes($data['schedules']),
+            );
+            $this->recordProfessionalEvent('professional.updated', $updatedProfessional);
+
             return [
-                'professional' => $this->professionals->update(
-                    $professional,
-                    $this->professionalAttributes($data),
-                    $this->scheduleAttributes($data['schedules']),
-                ),
+                'professional' => $updatedProfessional,
                 'invitation_url' => $invitationUrl,
             ];
         }, 3);
@@ -127,7 +140,13 @@ class ProfessionalService
             $professional->loadMissing('user');
             $this->users->suspendProfessional($professional->user);
 
-            return $this->professionals->setStatus($professional, ProfessionalStatus::Inactive);
+            $inactiveProfessional = $this->professionals->setStatus(
+                $professional,
+                ProfessionalStatus::Inactive,
+            );
+            $this->recordProfessionalEvent('professional.deactivated', $inactiveProfessional);
+
+            return $inactiveProfessional;
         }, 3);
     }
 
@@ -142,11 +161,14 @@ class ProfessionalService
                 $professional->user,
             );
 
+            $restoredProfessional = $this->professionals->setStatus(
+                $professional,
+                ProfessionalStatus::Active,
+            );
+            $this->recordProfessionalEvent('professional.restored', $restoredProfessional);
+
             return [
-                'professional' => $this->professionals->setStatus(
-                    $professional,
-                    ProfessionalStatus::Active,
-                ),
+                'professional' => $restoredProfessional,
                 'invitation_url' => $invitationUrl,
             ];
         }, 3);
@@ -237,6 +259,20 @@ class ProfessionalService
                 ];
             },
             $schedules,
+        );
+    }
+
+    private function recordProfessionalEvent(
+        string $event,
+        Professional $professional,
+    ): void {
+        $actor = Auth::user();
+
+        $this->audit->record(
+            event: $event,
+            auditable: $professional,
+            actor: $actor instanceof User ? $actor : null,
+            context: AuditContext::fromRequest(),
         );
     }
 }

@@ -8,6 +8,7 @@ export interface PermissionOption {
     value: string;
     label: string;
     description?: string;
+    allowed_roles: string[];
 }
 
 export interface UserStatus {

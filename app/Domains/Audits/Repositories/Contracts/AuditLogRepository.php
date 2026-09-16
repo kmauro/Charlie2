@@ -3,6 +3,7 @@
 namespace App\Domains\Audits\Repositories\Contracts;
 
 use App\Domains\Audits\Models\AuditLog;
+use DateTimeInterface;
 
 interface AuditLogRepository
 {
@@ -22,4 +23,8 @@ interface AuditLogRepository
      * }  $attributes
      */
     public function create(array $attributes): AuditLog;
+
+    public function countCreatedBefore(DateTimeInterface $cutoff): int;
+
+    public function deleteCreatedBefore(DateTimeInterface $cutoff): int;
 }

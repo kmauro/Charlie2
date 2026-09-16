@@ -6,6 +6,7 @@ use App\Domains\Professionals\Enums\OfficeAssignmentType;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,10 @@ class ProfessionalFactory extends Factory
                     ['code' => RoleCode::Professional->value],
                     ['name' => RoleCode::Professional->label()],
                 )->getKey(),
+                'permissions' => [
+                    UserPermission::ManageAppointments->value,
+                    UserPermission::AccessExternalClinicalRecord->value,
+                ],
             ]),
             'document_number' => fake()->unique()->numerify('########'),
             'phone' => fake()->phoneNumber(),
