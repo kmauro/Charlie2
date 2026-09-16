@@ -5,9 +5,12 @@ namespace App\Domains\Organizations\Policies;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 
 class LocationPolicy
 {
+    public function __construct(private UserScopeService $scope) {}
+
     public function viewAny(User $user): bool
     {
         return $this->canView($user);
@@ -15,7 +18,8 @@ class LocationPolicy
 
     public function view(User $user, Location $location): bool
     {
-        return $this->canView($user);
+        return $this->canView($user)
+            && $this->scope->canAccessLocation($user, (int) $location->getKey());
     }
 
     public function create(User $user): bool
@@ -25,17 +29,20 @@ class LocationPolicy
 
     public function update(User $user, Location $location): bool
     {
-        return ! $location->isArchived() && $this->canManage($user);
+        return ! $location->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLocation($user, (int) $location->getKey());
     }
 
     public function delete(User $user, Location $location): bool
     {
-        return ! $location->isArchived() && $this->canManage($user);
+        return ! $location->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLocation($user, (int) $location->getKey());
     }
 
     public function restore(User $user, Location $location): bool
     {
-        return $location->isArchived() && $this->canManage($user);
+        return $location->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLocation($user, (int) $location->getKey());
     }
 
     public function forceDelete(User $user, Location $location): bool

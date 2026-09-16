@@ -34,6 +34,13 @@ function appointmentsActor(RoleCode $role): User
     ]);
 }
 
+function grantAppointmentLocation(User $actor, Location $location): void
+{
+    if (! $actor->hasRole(RoleCode::SuperAdmin)) {
+        $actor->locations()->syncWithoutDetaching([$location->getKey()]);
+    }
+}
+
 /** @return array{patient: Patient, professional: Professional, location: Location, starts_at: CarbonInterface} */
 function appointmentSchedulingContext(
     int $durationMinutes = 30,
@@ -92,6 +99,7 @@ it('applies the appointment role matrix and never permits deletion', function ()
         RoleCode::Reception,
     ] as $role) {
         $actor = appointmentsActor($role);
+        grantAppointmentLocation($actor, $appointment->location);
 
         expect($actor->can('viewAny', Appointment::class))->toBeTrue()
             ->and($actor->can('create', Appointment::class))->toBeTrue()
@@ -133,6 +141,7 @@ it('applies the appointment role matrix and never permits deletion', function ()
 it('renders index and form contracts from persisted references', function () {
     $actor = appointmentsActor(RoleCode::Administrator);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
     $appointment = Appointment::factory()->create([
         'patient_id' => $context['patient'],
         'professional_id' => $context['professional'],
@@ -186,6 +195,7 @@ it('renders index and form contracts from persisted references', function () {
 it('creates using the professional duration snapshot', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext(45);
+    grantAppointmentLocation($actor, $context['location']);
 
     $this->actingAs($actor)
         ->post(route('appointments.store'), validAppointmentPayload($context))
@@ -208,6 +218,7 @@ it('creates using the professional duration snapshot', function () {
 it('keeps the professional schedule linked when a location is renamed', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
     $context['location']->update(['name' => 'Sede Central Renovada']);
 
     $this->actingAs($actor)
@@ -220,6 +231,7 @@ it('keeps the professional schedule linked when a location is renamed', function
 it('keeps normalized-name fallback for legacy professional schedules', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
     ProfessionalSchedule::query()->update(['location_id' => null]);
 
     $this->actingAs($actor)
@@ -232,6 +244,7 @@ it('keeps normalized-name fallback for legacy professional schedules', function 
 it('rejects overbook and server-calculated fields from clients', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
 
     $this->actingAs($actor)
         ->post(route('appointments.store'), validAppointmentPayload($context, [
@@ -256,6 +269,7 @@ it('rejects overbook and server-calculated fields from clients', function () {
 it('requires eligible references and a matching professional schedule', function () {
     $actor = appointmentsActor(RoleCode::Administrator);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
 
     $context['patient']->update(['status' => PatientStatus::Blocked]);
     $this->actingAs($actor)
@@ -286,6 +300,7 @@ it('requires eligible references and a matching professional schedule', function
 it('requires the complete appointment window to fit location operating hours', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext(30);
+    grantAppointmentLocation($actor, $context['location']);
     $context['location']->update([
         'opening_time' => '10:15',
         'closing_time' => '20:00',
@@ -309,6 +324,7 @@ it('requires the complete appointment window to fit location operating hours', f
 it('blocks overlaps for the professional patient and office', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
     Appointment::factory()->create([
         'patient_id' => $context['patient'],
         'professional_id' => $context['professional'],
@@ -369,6 +385,7 @@ it('blocks overlaps for the professional patient and office', function () {
 it('allows adjacent appointments because they do not overlap', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
+    grantAppointmentLocation($actor, $context['location']);
     Appointment::factory()->create([
         'patient_id' => Patient::factory(),
         'professional_id' => $context['professional'],
@@ -390,6 +407,7 @@ it('allows adjacent appointments because they do not overlap', function () {
 it('updates atomically and rejects a stale lock version', function () {
     $actor = appointmentsActor(RoleCode::Administrator);
     $context = appointmentSchedulingContext(45);
+    grantAppointmentLocation($actor, $context['location']);
     $appointment = Appointment::factory()->create([
         'patient_id' => $context['patient'],
         'professional_id' => $context['professional'],
@@ -424,6 +442,7 @@ it('changes status only through valid workflow transitions', function () {
     $appointment = Appointment::factory()->create([
         'status' => AppointmentStatus::Reserved,
     ]);
+    grantAppointmentLocation($actor, $appointment->location);
 
     $this->actingAs($actor)
         ->patch(route('appointments.status', $appointment), [
@@ -434,7 +453,9 @@ it('changes status only through valid workflow transitions', function () {
 
     $appointment->refresh();
     expect($appointment->status)->toBe(AppointmentStatus::Confirmed)
-        ->and($appointment->lock_version)->toBe(2);
+        ->and($appointment->lock_version)->toBe(2)
+        ->and(AuditLog::query()->where('event', 'appointment.status_changed')->sole()->before_values)->toBe([])
+        ->and(AuditLog::query()->where('event', 'appointment.status_changed')->sole()->after_values)->toBe([]);
 
     $this->patch(route('appointments.status', $appointment), [
         'status' => AppointmentStatus::Cancelled->value,
@@ -448,6 +469,7 @@ it('cancels with at least 24 hours notice and preserves actor traceability', fun
         'starts_at' => now()->addHours(48),
         'ends_at' => now()->addHours(48)->addMinutes(30),
     ]);
+    grantAppointmentLocation($actor, $appointment->location);
 
     $this->actingAs($actor)
         ->patch(route('appointments.cancel', $appointment), [
@@ -476,6 +498,7 @@ it('blocks cancellation with less than 24 hours notice', function () {
         'starts_at' => now()->addHours(23),
         'ends_at' => now()->addHours(23)->addMinutes(30),
     ]);
+    grantAppointmentLocation($actor, $appointment->location);
 
     $this->actingAs($actor)
         ->patch(route('appointments.cancel', $appointment), [

@@ -2,10 +2,12 @@
 import AuthShell from '@/domains/auth/layouts/AuthShell.vue';
 import BaseIcon from '@/shared/components/BaseIcon.vue';
 import FieldError from '@/shared/components/FieldError.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 const showPassword = ref(false);
+const page = usePage();
+const status = computed(() => page.props.status as string | undefined);
 
 const form = useForm({
     email: '',
@@ -45,6 +47,13 @@ const submit = (): void => {
             </p>
         </div>
 
+        <div
+            v-if="status"
+            class="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+        >
+            {{ status }}
+        </div>
+
         <form class="mt-8 grid gap-5" novalidate @submit.prevent="submit">
             <div class="grid gap-2">
                 <label
@@ -81,12 +90,10 @@ const submit = (): void => {
             </div>
 
             <div class="grid gap-2">
-                <label
-                    for="password"
-                    class="text-sm font-medium text-slate-800 dark:text-slate-200"
-                >
-                    Contraseña
-                </label>
+                <div class="flex items-center justify-between gap-3">
+                    <label for="password" class="text-sm font-medium text-slate-800 dark:text-slate-200">Contraseña</label>
+                    <Link href="/recuperar-contrasena" class="text-xs font-semibold text-clinic-700 hover:underline dark:text-clinic-300">¿La olvidaste?</Link>
+                </div>
                 <div class="relative">
                     <BaseIcon
                         name="lock-keyhole"

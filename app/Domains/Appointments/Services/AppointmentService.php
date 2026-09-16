@@ -17,6 +17,7 @@ use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -31,6 +32,7 @@ class AppointmentService
     public function __construct(
         private AppointmentRepository $appointments,
         private AuditService $audit,
+        private UserScopeService $scope,
     ) {}
 
     /**
@@ -41,6 +43,7 @@ class AppointmentService
         array $filters,
         int $perPage,
         ?int $professionalId,
+        ?array $locationIds,
     ): LengthAwarePaginator {
         $normalizedFilters = Arr::only($filters, [
             'date',
@@ -68,13 +71,14 @@ class AppointmentService
             ),
             min(max($perPage, 1), 100),
             $professionalId,
+            $locationIds,
         );
     }
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
-    public function summaries(?int $professionalId): array
+    public function summaries(?int $professionalId, ?array $locationIds): array
     {
-        return $this->appointments->summaries($professionalId);
+        return $this->appointments->summaries($professionalId, $locationIds);
     }
 
     public function find(int $id): Appointment
@@ -91,6 +95,12 @@ class AppointmentService
         return $this->appointments->professionalIdForUser((int) $user->getKey()) ?? 0;
     }
 
+    /** @return array<int, int>|null */
+    public function locationScopeFor(User $user): ?array
+    {
+        return $this->scope->locationIdsFor($user);
+    }
+
     /** @return Collection<int, Patient> */
     public function availablePatients(): Collection
     {
@@ -98,15 +108,15 @@ class AppointmentService
     }
 
     /** @return Collection<int, Professional> */
-    public function activeProfessionals(?int $professionalId = null): Collection
+    public function activeProfessionals(?int $professionalId = null, ?array $locationIds = null): Collection
     {
-        return $this->appointments->activeProfessionals($professionalId);
+        return $this->appointments->activeProfessionals($professionalId, $locationIds);
     }
 
     /** @return Collection<int, Location> */
-    public function activeLocations(): Collection
+    public function activeLocations(?array $locationIds = null): Collection
     {
-        return $this->appointments->activeLocations();
+        return $this->appointments->activeLocations($locationIds);
     }
 
     /** @param array<string, mixed> $data */
@@ -117,6 +127,7 @@ class AppointmentService
     ): Appointment {
         return DB::transaction(function () use ($data, $actor, $auditContext): Appointment {
             [$patient, $professional, $location] = $this->lockReferences($data);
+            $this->ensureLocationAccess($actor, $location);
             [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
                 $data,
                 $professional,
@@ -183,6 +194,7 @@ class AppointmentService
             }
 
             [$patient, $professional, $location] = $this->lockReferences($data);
+            $this->ensureLocationAccess($actor, $location);
             [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
                 $data,
                 $professional,
@@ -261,7 +273,6 @@ class AppointmentService
                 ]);
             }
 
-            $beforeValues = $this->auditSnapshot($lockedAppointment);
             $updatedAppointment = $this->appointments->update(
                 $lockedAppointment,
                 [
@@ -273,8 +284,6 @@ class AppointmentService
             $this->audit->record(
                 event: 'appointment.status_changed',
                 auditable: $updatedAppointment,
-                beforeValues: $beforeValues,
-                afterValues: $this->auditSnapshot($updatedAppointment),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -347,7 +356,7 @@ class AppointmentService
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array{0: CarbonImmutable, 1: CarbonImmutable, 2: int}
      */
     private function appointmentWindow(
@@ -515,7 +524,7 @@ class AppointmentService
     }
 
     /**
-     * @param array<string, mixed> $data
+     * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function appointmentAttributes(
@@ -585,5 +594,14 @@ class AppointmentService
     private function nullableString(mixed $value): ?string
     {
         return filled($value) ? Str::squish((string) $value) : null;
+    }
+
+    private function ensureLocationAccess(User $actor, Location $location): void
+    {
+        if (! $this->scope->canAccessLocation($actor, (int) $location->getKey())) {
+            throw ValidationException::withMessages([
+                'location_id' => 'La sede seleccionada está fuera de tu alcance.',
+            ]);
+        }
     }
 }

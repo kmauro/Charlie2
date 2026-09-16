@@ -64,6 +64,7 @@ it('allows only superadmins to access every user management action', function ()
 
 it('renders the user index with its paginator filters roles and summaries', function () {
     $actor = usersSuperAdmin();
+    $actor->update(['name' => 'Super Admin']);
     $target = User::factory()->create([
         'name' => 'Ada Lovelace',
         'status' => UserStatus::Active,

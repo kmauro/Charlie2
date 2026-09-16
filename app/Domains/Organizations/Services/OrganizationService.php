@@ -9,6 +9,7 @@ use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Organizations\Repositories\Contracts\OrganizationRepository;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Arr;
@@ -21,14 +22,18 @@ class OrganizationService
     public function __construct(
         private OrganizationRepository $organizations,
         private AuditService $audit,
+        private UserScopeService $scope,
     ) {}
 
     /**
      * @param  array{search?: string, status?: string, legal_entity_id?: int|string}  $filters
      * @return LengthAwarePaginator<int, Location>
      */
-    public function paginateLocations(array $filters = [], int $perPage = 15): LengthAwarePaginator
-    {
+    public function paginateLocations(
+        array $filters = [],
+        int $perPage = 15,
+        ?array $locationIds = null,
+    ): LengthAwarePaginator {
         $normalizedFilters = Arr::only(
             $filters,
             ['search', 'status', 'legal_entity_id'],
@@ -36,6 +41,10 @@ class OrganizationService
 
         if (isset($normalizedFilters['search'])) {
             $normalizedFilters['search'] = Str::squish($normalizedFilters['search']);
+        }
+
+        if ($locationIds !== null) {
+            $normalizedFilters['_location_ids'] = $locationIds;
         }
 
         return $this->organizations->paginateLocations(
@@ -51,12 +60,24 @@ class OrganizationService
      * @param  array{search?: string, status?: string}  $filters
      * @return LengthAwarePaginator<int, LegalEntity>
      */
-    public function paginateLegalEntities(array $filters = [], int $perPage = 15): LengthAwarePaginator
-    {
+    public function paginateLegalEntities(
+        array $filters = [],
+        int $perPage = 15,
+        ?array $legalEntityIds = null,
+        ?array $locationIds = null,
+    ): LengthAwarePaginator {
         $normalizedFilters = Arr::only($filters, ['search', 'status']);
 
         if (isset($normalizedFilters['search'])) {
             $normalizedFilters['search'] = Str::squish($normalizedFilters['search']);
+        }
+
+        if ($legalEntityIds !== null) {
+            $normalizedFilters['_legal_entity_ids'] = $legalEntityIds;
+        }
+
+        if ($locationIds !== null) {
+            $normalizedFilters['_location_ids'] = $locationIds;
         }
 
         return $this->organizations->paginateLegalEntities(
@@ -75,9 +96,11 @@ class OrganizationService
     }
 
     /** @return array{locations_total: int, locations_active: int, locations_preparation: int, locations_archived: int, legal_entities_total: int, legal_entities_active: int} */
-    public function summaries(): array
-    {
-        return $this->organizations->summaries();
+    public function summaries(
+        ?array $locationIds = null,
+        ?array $legalEntityIds = null,
+    ): array {
+        return $this->organizations->summaries($locationIds, $legalEntityIds);
     }
 
     /** @param array<string, mixed> $data */
@@ -122,15 +145,22 @@ class OrganizationService
             }
 
             $beforeValues = $this->legalEntitySnapshot($lockedLegalEntity);
+            $statusChanged = $lockedLegalEntity->status !== $attributes['status'];
             $updatedLegalEntity = $this->organizations->updateLegalEntity(
                 $lockedLegalEntity,
                 $attributes,
             );
+            $afterValues = $this->legalEntitySnapshot($updatedLegalEntity);
+
+            if ($statusChanged) {
+                $beforeValues = Arr::except($beforeValues, ['status', 'archived_at']);
+                $afterValues = Arr::except($afterValues, ['status', 'archived_at']);
+            }
             $this->audit->record(
                 event: 'legal_entity.updated',
                 auditable: $updatedLegalEntity,
                 beforeValues: $beforeValues,
-                afterValues: $this->legalEntitySnapshot($updatedLegalEntity),
+                afterValues: $afterValues,
                 actor: $actor,
                 context: $auditContext,
             );
@@ -154,7 +184,6 @@ class OrganizationService
                 ]);
             }
 
-            $beforeValues = $this->legalEntitySnapshot($lockedLegalEntity);
             $archivedLegalEntity = $this->organizations->setLegalEntityStatus(
                 $lockedLegalEntity,
                 OrganizationStatus::Archived,
@@ -163,8 +192,6 @@ class OrganizationService
             $this->audit->record(
                 event: 'legal_entity.archived',
                 auditable: $archivedLegalEntity,
-                beforeValues: $beforeValues,
-                afterValues: $this->legalEntitySnapshot($archivedLegalEntity),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -187,7 +214,6 @@ class OrganizationService
                 ]);
             }
 
-            $beforeValues = $this->legalEntitySnapshot($lockedLegalEntity);
             $restoredLegalEntity = $this->organizations->setLegalEntityStatus(
                 $lockedLegalEntity,
                 OrganizationStatus::Active,
@@ -196,8 +222,6 @@ class OrganizationService
             $this->audit->record(
                 event: 'legal_entity.restored',
                 auditable: $restoredLegalEntity,
-                beforeValues: $beforeValues,
-                afterValues: $this->legalEntitySnapshot($restoredLegalEntity),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -213,6 +237,11 @@ class OrganizationService
         AuditContext $auditContext,
     ): Location {
         return DB::transaction(function () use ($data, $actor, $auditContext): Location {
+            if (! $this->scope->canAccessLegalEntity($actor, (int) $data['legal_entity_id'])) {
+                throw ValidationException::withMessages([
+                    'legal_entity_id' => 'La razón social seleccionada está fuera de tu alcance.',
+                ]);
+            }
             $legalEntity = $this->organizations->findLegalEntityOrFail(
                 (int) $data['legal_entity_id'],
             );
@@ -241,6 +270,11 @@ class OrganizationService
         AuditContext $auditContext,
     ): Location {
         return DB::transaction(function () use ($location, $data, $actor, $auditContext): Location {
+            if (! $this->scope->canAccessLegalEntity($actor, (int) $data['legal_entity_id'])) {
+                throw ValidationException::withMessages([
+                    'legal_entity_id' => 'La razón social seleccionada está fuera de tu alcance.',
+                ]);
+            }
             $legalEntity = $this->organizations->findLegalEntityOrFail(
                 (int) $data['legal_entity_id'],
             );
@@ -249,15 +283,22 @@ class OrganizationService
             $lockedLocation = $this->organizations->lockLocationForUpdate($location);
             $this->ensureNotArchived($lockedLocation);
             $beforeValues = $this->locationSnapshot($lockedLocation);
+            $statusChanged = $lockedLocation->status !== OrganizationStatus::from($data['status']);
             $updatedLocation = $this->organizations->updateLocation(
                 $lockedLocation,
                 $this->locationAttributes($data),
             );
+            $afterValues = $this->locationSnapshot($updatedLocation);
+
+            if ($statusChanged) {
+                $beforeValues = Arr::except($beforeValues, ['status', 'archived_at']);
+                $afterValues = Arr::except($afterValues, ['status', 'archived_at']);
+            }
             $this->audit->record(
                 event: 'location.updated',
                 auditable: $updatedLocation,
                 beforeValues: $beforeValues,
-                afterValues: $this->locationSnapshot($updatedLocation),
+                afterValues: $afterValues,
                 actor: $actor,
                 context: $auditContext,
             );
@@ -278,7 +319,6 @@ class OrganizationService
             $this->organizations->lockLegalEntityForUpdate($legalEntity);
             $lockedLocation = $this->organizations->lockLocationForUpdate($location);
             $this->ensureNotArchived($lockedLocation);
-            $beforeValues = $this->locationSnapshot($lockedLocation);
             $archivedLocation = $this->organizations->setLocationStatus(
                 $lockedLocation,
                 OrganizationStatus::Archived,
@@ -287,8 +327,6 @@ class OrganizationService
             $this->audit->record(
                 event: 'location.archived',
                 auditable: $archivedLocation,
-                beforeValues: $beforeValues,
-                afterValues: $this->locationSnapshot($archivedLocation),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -318,7 +356,6 @@ class OrganizationService
             }
 
             $this->ensureLegalEntityIsActive($lockedLegalEntity);
-            $beforeValues = $this->locationSnapshot($lockedLocation);
             $restoredLocation = $this->organizations->setLocationStatus(
                 $lockedLocation,
                 OrganizationStatus::Active,
@@ -327,8 +364,6 @@ class OrganizationService
             $this->audit->record(
                 event: 'location.restored',
                 auditable: $restoredLocation,
-                beforeValues: $beforeValues,
-                afterValues: $this->locationSnapshot($restoredLocation),
                 actor: $actor,
                 context: $auditContext,
             );

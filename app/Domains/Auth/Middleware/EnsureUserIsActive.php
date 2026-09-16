@@ -16,9 +16,9 @@ class EnsureUserIsActive
         $user = $request->user();
 
         if ($user instanceof User) {
-            $user->loadMissing('role');
+            $user->loadMissing(['role', 'patient']);
 
-            if ($user->isActive() && $user->role !== null) {
+            if ($user->canAccessApplication()) {
                 return $next($request);
             }
         }

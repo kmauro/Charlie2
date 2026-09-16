@@ -11,29 +11,38 @@ use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(): Response
+    public function __construct(private UserScopeService $scope) {}
+
+    public function __invoke(Request $request): Response
     {
+        $actor = $request->user();
+        abort_unless($actor instanceof User, 401);
+        $locationIds = $this->scope->locationIdsFor($actor);
+
         return Inertia::render('dashboard/views/Dashboard', [
-            'metrics' => $this->metrics(),
-            'upcomingAppointments' => $this->upcomingAppointments(),
-            'appointmentContext' => $this->appointmentContext(),
-            'operationalStatuses' => $this->operationalStatuses(),
+            'metrics' => $this->metrics($locationIds),
+            'upcomingAppointments' => $this->upcomingAppointments($locationIds),
+            'appointmentContext' => $this->appointmentContext($locationIds),
+            'operationalStatuses' => $this->operationalStatuses($locationIds),
         ]);
     }
 
     /**
      * @return array<int, array{label: string, value: string, detail: string, icon: string, tone: string}>
      */
-    private function metrics(): array
+    private function metrics(?array $locationIds): array
     {
-        $todayAppointments = $this->todayAppointments();
+        $todayAppointments = $this->todayAppointments($locationIds);
         $todayCount = $todayAppointments->count();
         $confirmedCount = $todayAppointments
             ->where('status', AppointmentStatus::Confirmed)
@@ -47,6 +56,10 @@ class DashboardController extends Controller
             ->count();
         $activeProfessionals = Professional::query()->active()->count();
         $professionalsAttendingNow = Appointment::query()
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            )
             ->where('status', AppointmentStatus::Present->value)
             ->where('starts_at', '<=', now())
             ->where('ends_at', '>=', now())
@@ -59,7 +72,16 @@ class DashboardController extends Controller
             )
             ->distinct('professional_id')
             ->count('professional_id');
-        $activeLocations = $this->activeLocationsCount();
+        if ($locationIds !== null) {
+            $activeProfessionals = Professional::query()
+                ->active()
+                ->whereHas(
+                    'schedules',
+                    fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+                )
+                ->count();
+        }
+        $activeLocations = $this->activeLocationsCount($locationIds);
 
         return [
             [
@@ -96,12 +118,16 @@ class DashboardController extends Controller
     /**
      * @return array<int, array{time: string, patient: string, professional: string, specialty: string, status: string, tone: string}>
      */
-    private function upcomingAppointments(): array
+    private function upcomingAppointments(?array $locationIds): array
     {
         return Appointment::query()
             ->with(['patient:id,first_name,last_name', 'professional.user:id,name'])
             ->whereBetween('starts_at', [now(), now()->endOfDay()])
             ->whereIn('status', AppointmentStatus::blockingValues())
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            )
             ->orderBy('starts_at')
             ->limit(3)
             ->get()
@@ -119,10 +145,10 @@ class DashboardController extends Controller
     /**
      * @return array{location: string, period: string}
      */
-    private function appointmentContext(): array
+    private function appointmentContext(?array $locationIds): array
     {
         return [
-            'location' => 'Todas las sedes',
+            'location' => $locationIds === null ? 'Todas las sedes' : 'Sedes asignadas',
             'period' => 'Hoy',
         ];
     }
@@ -130,15 +156,35 @@ class DashboardController extends Controller
     /**
      * @return array<int, array{title: string, detail: string, icon: string, tone: string}>
      */
-    private function operationalStatuses(): array
+    private function operationalStatuses(?array $locationIds): array
     {
-        $activeLocations = $this->activeLocationsCount();
+        $activeLocations = $this->activeLocationsCount($locationIds);
         $appointmentsToConfirm = Appointment::query()
             ->whereBetween('starts_at', [now()->startOfDay(), now()->endOfDay()])
             ->where('status', AppointmentStatus::Reserved->value)
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            )
             ->count();
         $pendingInvitations = User::query()
             ->where('status', UserStatus::PendingInvitation->value)
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->where(
+                    fn (Builder $scopeQuery) => $scopeQuery
+                        ->whereHas(
+                            'locations',
+                            fn (Builder $locationQuery) => $locationQuery
+                                ->whereIn('locations.id', $locationIds),
+                        )
+                        ->orWhereHas(
+                            'legalEntities.locations',
+                            fn (Builder $locationQuery) => $locationQuery
+                                ->whereIn('locations.id', $locationIds),
+                        ),
+                ),
+            )
             ->count();
 
         return [
@@ -164,18 +210,26 @@ class DashboardController extends Controller
     }
 
     /** @return Collection<int, Appointment> */
-    private function todayAppointments(): Collection
+    private function todayAppointments(?array $locationIds): Collection
     {
         return Appointment::query()
             ->whereBetween('starts_at', [now()->startOfDay(), now()->endOfDay()])
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            )
             ->get(['id', 'status']);
     }
 
-    private function activeLocationsCount(): int
+    private function activeLocationsCount(?array $locationIds): int
     {
         return Location::query()
             ->where('status', OrganizationStatus::Active->value)
             ->whereNull('archived_at')
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereKey($locationIds),
+            )
             ->count();
     }
 

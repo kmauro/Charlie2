@@ -40,5 +40,6 @@ interface PatientRepository
         PatientStatus $status,
         ?\DateTimeInterface $archivedAt,
         ?PatientStatus $previousStatus,
+        ?\DateTimeInterface $portalAccessUntil,
     ): Patient;
 }

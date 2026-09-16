@@ -136,12 +136,14 @@ class EloquentPatientRepository implements PatientRepository
         PatientStatus $status,
         ?\DateTimeInterface $archivedAt,
         ?PatientStatus $previousStatus,
+        ?\DateTimeInterface $portalAccessUntil,
     ): Patient {
         $patient->update([
             'status' => $status,
             'lock_version' => $patient->lock_version + 1,
             'previous_status' => $previousStatus,
             'archived_at' => $archivedAt,
+            'portal_access_until' => $portalAccessUntil,
         ]);
 
         return $this->findOrFail((int) $patient->getKey());

@@ -48,6 +48,7 @@ class HandleInertiaRequests extends Middleware
                 ],
             ],
             'interfaceMode' => true,
+            'status' => fn (): mixed => $request->session()->get('status'),
         ];
     }
 }

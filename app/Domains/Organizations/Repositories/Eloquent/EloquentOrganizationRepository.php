@@ -40,6 +40,10 @@ class EloquentOrganizationRepository implements OrganizationRepository
             ])
             ->with('legalEntity:id,business_name,cuit,status')
             ->when(
+                array_key_exists('_location_ids', $filters),
+                fn (Builder $query) => $query->whereKey($filters['_location_ids']),
+            )
+            ->when(
                 $filters['search'] ?? null,
                 fn (Builder $query, string $search) => $query->where(
                     fn (Builder $nestedQuery) => $nestedQuery
@@ -87,12 +91,27 @@ class EloquentOrganizationRepository implements OrganizationRepository
                 'updated_at',
             ])
             ->withCount([
-                'locations',
+                'locations' => fn (Builder $query) => $query->when(
+                    array_key_exists('_location_ids', $filters),
+                    fn (Builder $scopeQuery) => $scopeQuery->whereKey($filters['_location_ids']),
+                ),
                 'locations as active_locations_count' => fn (Builder $query) => $query
+                    ->when(
+                        array_key_exists('_location_ids', $filters),
+                        fn (Builder $scopeQuery) => $scopeQuery->whereKey($filters['_location_ids']),
+                    )
                     ->where('status', OrganizationStatus::Active->value),
                 'locations as unarchived_locations_count' => fn (Builder $query) => $query
+                    ->when(
+                        array_key_exists('_location_ids', $filters),
+                        fn (Builder $scopeQuery) => $scopeQuery->whereKey($filters['_location_ids']),
+                    )
                     ->where('status', '!=', OrganizationStatus::Archived->value),
             ])
+            ->when(
+                array_key_exists('_legal_entity_ids', $filters),
+                fn (Builder $query) => $query->whereKey($filters['_legal_entity_ids']),
+            )
             ->when(
                 $filters['search'] ?? null,
                 fn (Builder $query, string $search) => $query->where(
@@ -126,14 +145,22 @@ class EloquentOrganizationRepository implements OrganizationRepository
             ->get();
     }
 
-    public function summaries(): array
+    public function summaries(?array $locationIds = null, ?array $legalEntityIds = null): array
     {
         $locationCounts = Location::query()
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereKey($locationIds),
+            )
             ->select('status')
             ->selectRaw('COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
         $legalEntityCounts = LegalEntity::query()
+            ->when(
+                $legalEntityIds !== null,
+                fn (Builder $query) => $query->whereKey($legalEntityIds),
+            )
             ->select('status')
             ->selectRaw('COUNT(*) as aggregate')
             ->groupBy('status')

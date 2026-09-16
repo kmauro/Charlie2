@@ -3,6 +3,8 @@
 use App\Domains\Appointments\Controllers\AppointmentController;
 use App\Domains\Audits\Controllers\AuditLogController;
 use App\Domains\Auth\Controllers\AuthenticatedSessionController;
+use App\Domains\Auth\Controllers\NewPasswordController;
+use App\Domains\Auth\Controllers\PasswordResetLinkController;
 use App\Domains\Auth\Controllers\RegisteredUserController;
 use App\Domains\Auth\Middleware\EnsureUserIsActive;
 use App\Domains\Dashboard\Controllers\DashboardController;
@@ -19,6 +21,16 @@ Route::redirect('/', '/login');
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+    Route::get('/recuperar-contrasena', [PasswordResetLinkController::class, 'create'])
+        ->name('password.request');
+    Route::post('/recuperar-contrasena', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('password.email');
+    Route::get('/restablecer-contrasena/{token}', [NewPasswordController::class, 'create'])
+        ->name('password.reset');
+    Route::post('/restablecer-contrasena', [NewPasswordController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('password.update');
 
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
     Route::get('/register/{user}', [RegisteredUserController::class, 'accept'])

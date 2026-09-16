@@ -3,6 +3,7 @@ import UserForm from '@/domains/users/components/UserForm.vue';
 import type {
     PermissionOption,
     RoleOption,
+    ScopeOption,
 } from '@/domains/users/types';
 import AppShell from '@/shared/layouts/AppShell.vue';
 import { Head } from '@inertiajs/vue3';
@@ -10,6 +11,8 @@ import { Head } from '@inertiajs/vue3';
 defineProps<{
     roles: RoleOption[];
     permissionOptions: PermissionOption[];
+    legalEntityOptions: ScopeOption[];
+    locationOptions: ScopeOption[];
 }>();
 </script>
 
@@ -26,6 +29,8 @@ defineProps<{
             endpoint="/usuarios"
             :roles="roles"
             :permission-options="permissionOptions"
+            :legal-entity-options="legalEntityOptions"
+            :location-options="locationOptions"
         />
     </AppShell>
 </template>

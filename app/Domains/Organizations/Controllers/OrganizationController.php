@@ -11,6 +11,7 @@ use App\Domains\Organizations\Requests\StoreLocationRequest;
 use App\Domains\Organizations\Requests\UpdateLocationRequest;
 use App\Domains\Organizations\Services\OrganizationService;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,7 @@ class OrganizationController extends Controller
 {
     public function __construct(
         private OrganizationService $service,
+        private UserScopeService $scope,
     ) {}
 
     public function index(Request $request): Response
@@ -37,22 +39,28 @@ class OrganizationController extends Controller
             'per_page' => ['nullable', 'integer', 'between:1,100'],
         ]);
         $filters = Arr::only($validated, ['search', 'status', 'legal_entity_id']);
+        $actor = $this->authenticatedUser($request);
+        $locationIds = $this->scope->locationIdsFor($actor);
+        $legalEntityIds = $this->scope->legalEntityIdsFor($actor);
         $locations = $this->service
-            ->paginateLocations($filters, (int) ($validated['per_page'] ?? 12))
+            ->paginateLocations(
+                $filters,
+                (int) ($validated['per_page'] ?? 12),
+                $locationIds,
+            )
             ->appends(Arr::only($validated, [
                 'search',
                 'status',
                 'legal_entity_id',
                 'per_page',
             ]));
-        $actor = $this->authenticatedUser($request);
 
         return Inertia::render('organizations/views/Index', [
             'locations' => $locations->through(
                 fn (Location $location): array => $this->locationData($location, $actor),
             ),
             'filters' => $filters,
-            'summaries' => $this->service->summaries(),
+            'summaries' => $this->service->summaries($locationIds, $legalEntityIds),
             'legalEntities' => $this->legalEntityOptions(false),
             'statusOptions' => $this->statusOptions(OrganizationStatus::cases()),
             'permissions' => [
@@ -175,7 +183,16 @@ class OrganizationController extends Controller
     /** @return array<int, array{id: int, label: string, cuit: string}> */
     private function legalEntityOptions(bool $onlyActive): array
     {
+        $actor = request()->user();
+        $legalEntityIds = $actor instanceof User
+            ? $this->scope->legalEntityIdsFor($actor)
+            : [];
+
         return $this->service->legalEntities($onlyActive)
+            ->when(
+                $legalEntityIds !== null,
+                fn ($entities) => $entities->whereIn('id', $legalEntityIds),
+            )
             ->map(fn (LegalEntity $legalEntity): array => [
                 'id' => (int) $legalEntity->getKey(),
                 'label' => $legalEntity->business_name,

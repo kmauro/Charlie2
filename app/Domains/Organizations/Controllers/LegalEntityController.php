@@ -9,6 +9,7 @@ use App\Domains\Organizations\Requests\StoreLegalEntityRequest;
 use App\Domains\Organizations\Requests\UpdateLegalEntityRequest;
 use App\Domains\Organizations\Services\OrganizationService;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ class LegalEntityController extends Controller
 {
     public function __construct(
         private OrganizationService $service,
+        private UserScopeService $scope,
     ) {}
 
     public function index(Request $request): Response
@@ -34,10 +36,15 @@ class LegalEntityController extends Controller
             'per_page' => ['nullable', 'integer', 'between:1,100'],
         ]);
         $filters = Arr::only($validated, ['search', 'status']);
-        $legalEntities = $this->service
-            ->paginateLegalEntities($filters, (int) ($validated['per_page'] ?? 15))
-            ->appends(Arr::only($validated, ['search', 'status', 'per_page']));
         $actor = $this->authenticatedUser($request);
+        $legalEntities = $this->service
+            ->paginateLegalEntities(
+                $filters,
+                (int) ($validated['per_page'] ?? 15),
+                $this->scope->legalEntityIdsFor($actor),
+                $this->scope->locationIdsFor($actor),
+            )
+            ->appends(Arr::only($validated, ['search', 'status', 'per_page']));
 
         return Inertia::render('organizations/legal-entities/Index', [
             'legalEntities' => $legalEntities->through(

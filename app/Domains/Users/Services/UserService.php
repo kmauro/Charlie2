@@ -97,6 +97,7 @@ class UserService
             'invitation_token_hash' => hash('sha256', $token),
             'invitation_expires_at' => $expiresAt,
         ]);
+        $this->syncOrganizationalScope($user, $role->code, $data);
 
         $this->recordUserEvent('user.invited', $user);
 
@@ -112,12 +113,17 @@ class UserService
 
         if (! array_key_exists('role_id', $attributes)) {
             $updatedUser = $this->users->update($user, $attributes);
+            $this->syncOrganizationalScope(
+                $updatedUser,
+                $updatedUser->role?->code,
+                $data,
+            );
             $this->recordUserEvent('user.updated', $updatedUser);
 
             return $updatedUser;
         }
 
-        return DB::transaction(function () use ($user, $attributes): User {
+        return DB::transaction(function () use ($user, $attributes, $data): User {
             $this->users->lockActiveByRole(RoleCode::SuperAdmin);
             $lockedUser = $this->users->findForUpdate((int) $user->getKey());
             $nextRole = $this->roles->find((int) $attributes['role_id']);
@@ -152,6 +158,7 @@ class UserService
             }
 
             $updatedUser = $this->users->update($lockedUser, $attributes);
+            $this->syncOrganizationalScope($updatedUser, $nextRole->code, $data);
             $this->recordUserEvent('user.updated', $updatedUser);
 
             return $updatedUser;
@@ -430,5 +437,29 @@ class UserService
             actor: $actor instanceof User ? $actor : null,
             context: AuditContext::fromRequest(),
         );
+    }
+
+    /** @param array<string, mixed> $data */
+    private function syncOrganizationalScope(
+        User $user,
+        ?RoleCode $role,
+        array $data,
+    ): void {
+        if (
+            ! array_key_exists('legal_entity_ids', $data)
+            && ! array_key_exists('location_ids', $data)
+        ) {
+            return;
+        }
+
+        if ($role === RoleCode::SuperAdmin) {
+            $user->legalEntities()->sync([]);
+            $user->locations()->sync([]);
+
+            return;
+        }
+
+        $user->legalEntities()->sync($data['legal_entity_ids'] ?? []);
+        $user->locations()->sync($data['location_ids'] ?? []);
     }
 }

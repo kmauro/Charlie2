@@ -3,6 +3,8 @@
 namespace App\Domains\Users\Models;
 
 use App\Domains\Audits\Models\AuditLog;
+use App\Domains\Auth\Notifications\ResetPasswordNotification;
+use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Database\Factories\UserFactory;
@@ -66,6 +68,12 @@ class User extends Authenticatable
         return $this->belongsToMany(Location::class)->withTimestamps();
     }
 
+    /** @return BelongsToMany<LegalEntity, $this> */
+    public function legalEntities(): BelongsToMany
+    {
+        return $this->belongsToMany(LegalEntity::class)->withTimestamps();
+    }
+
     /** @return HasMany<AuditLog, $this> */
     public function auditLogs(): HasMany
     {
@@ -93,6 +101,30 @@ class User extends Authenticatable
     public function isActive(): bool
     {
         return $this->status === UserStatus::Active;
+    }
+
+    public function canAccessApplication(): bool
+    {
+        if (! $this->isActive() || $this->role === null) {
+            return false;
+        }
+
+        if (! $this->hasRole(RoleCode::Patient)) {
+            return true;
+        }
+
+        return $this->patient?->canAccessPortal() ?? false;
+    }
+
+    public function canResetPassword(): bool
+    {
+        return $this->invitation_accepted_at !== null
+            && $this->canAccessApplication();
+    }
+
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification((string) $token));
     }
 
     /**

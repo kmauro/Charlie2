@@ -16,10 +16,12 @@ interface AppointmentRepository
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, Appointment>
      */
-    public function paginate(array $filters, int $perPage, ?int $professionalId): LengthAwarePaginator;
+    /** @param array<int, int>|null $locationIds */
+    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds): LengthAwarePaginator;
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
-    public function summaries(?int $professionalId): array;
+    /** @param array<int, int>|null $locationIds */
+    public function summaries(?int $professionalId, ?array $locationIds): array;
 
     public function findOrFail(int $id): Appointment;
 
@@ -63,10 +65,12 @@ interface AppointmentRepository
     public function availablePatients(): Collection;
 
     /** @return Collection<int, Professional> */
-    public function activeProfessionals(?int $onlyProfessionalId = null): Collection;
+    /** @param array<int, int>|null $locationIds */
+    public function activeProfessionals(?int $onlyProfessionalId = null, ?array $locationIds = null): Collection;
 
     /** @return Collection<int, Location> */
-    public function activeLocations(): Collection;
+    /** @param array<int, int>|null $locationIds */
+    public function activeLocations(?array $locationIds = null): Collection;
 
     public function professionalIdForUser(int $userId): ?int;
 }

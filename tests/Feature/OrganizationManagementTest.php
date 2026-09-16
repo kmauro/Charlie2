@@ -5,6 +5,7 @@ use App\Domains\Organizations\Enums\LocationService;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
+use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\Role;
@@ -19,7 +20,13 @@ function organizationUser(RoleCode $roleCode): User
 {
     $role = Role::query()->where('code', $roleCode->value)->sole();
 
-    return User::factory()->create(['role_id' => $role->getKey()]);
+    $user = User::factory()->create(['role_id' => $role->getKey()]);
+
+    if ($roleCode === RoleCode::Patient) {
+        Patient::factory()->for($user)->create();
+    }
+
+    return $user;
 }
 
 /** @return array<string, mixed> */
@@ -97,10 +104,16 @@ it('allows only superadmins and administrators to mutate organizations', functio
     $legalEntity = LegalEntity::factory()->create();
     $location = Location::factory()->for($legalEntity)->create();
 
+    if ($roleCode !== RoleCode::SuperAdmin) {
+        $actor->legalEntities()->attach($legalEntity);
+        $actor->locations()->attach($location);
+    }
+
     expect($actor->can('create', Location::class))
         ->toBeTrue()
         ->and($actor->can('update', $location))->toBeTrue()
-        ->and($actor->can('create', LegalEntity::class))->toBeTrue()
+        ->and($actor->can('create', LegalEntity::class))
+        ->toBe($roleCode === RoleCode::SuperAdmin)
         ->and($actor->can('update', $legalEntity))->toBeTrue();
 })->with([
     'superadmin' => RoleCode::SuperAdmin,
@@ -169,7 +182,7 @@ it('renders persisted organization data without frontend mocks', function () {
 });
 
 it('creates legal entities with canonical CUIT and an audit event', function () {
-    $actor = organizationUser(RoleCode::Administrator);
+    $actor = organizationUser(RoleCode::SuperAdmin);
 
     $this->actingAs($actor)
         ->post(route('legal_entities.store'), validLegalEntityPayload())
@@ -254,6 +267,8 @@ it('updates a location and preserves its database identity', function () {
     $location = Location::factory()->for($legalEntity)->create([
         'code' => 'OLD',
     ]);
+    $actor->legalEntities()->attach($legalEntity);
+    $actor->locations()->attach($location);
 
     $this->actingAs($actor)
         ->put(
@@ -290,7 +305,9 @@ it('archives and restores locations without physical deletion', function () {
     $location->refresh();
     expect($location->status)
         ->toBe(OrganizationStatus::Archived)
-        ->and($location->archived_at)->not->toBeNull();
+        ->and($location->archived_at)->not->toBeNull()
+        ->and(AuditLog::query()->where('event', 'location.archived')->sole()->before_values)->toBe([])
+        ->and(AuditLog::query()->where('event', 'location.archived')->sole()->after_values)->toBe([]);
     $this->assertModelExists($location);
 
     $this->patch(route('organizations.restore', $location))

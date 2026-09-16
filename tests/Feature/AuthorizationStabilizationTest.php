@@ -6,6 +6,7 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
+use App\Domains\Professionals\Models\ProfessionalSchedule;
 use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
@@ -46,6 +47,9 @@ it('lets professionals change only the status of their own appointments', functi
     $professional = Professional::factory()->create();
     $ownAppointment = Appointment::factory()->for($professional)->create();
     $otherAppointment = Appointment::factory()->create();
+    ProfessionalSchedule::factory()->for($professional)->create([
+        'location_id' => $ownAppointment->location_id,
+    ]);
 
     expect($professional->user->can('create', Appointment::class))->toBeFalse()
         ->and($professional->user->can('update', $ownAppointment))->toBeFalse()

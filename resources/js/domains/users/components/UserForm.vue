@@ -3,6 +3,7 @@ import type {
     EditableUser,
     PermissionOption,
     RoleOption,
+    ScopeOption,
 } from '@/domains/users/types';
 import BaseIcon from '@/shared/components/BaseIcon.vue';
 import FieldError from '@/shared/components/FieldError.vue';
@@ -14,6 +15,8 @@ const props = defineProps<{
     endpoint: string;
     roles: RoleOption[];
     permissionOptions: PermissionOption[];
+    legalEntityOptions: ScopeOption[];
+    locationOptions: ScopeOption[];
     user?: EditableUser;
 }>();
 
@@ -23,6 +26,8 @@ interface UserFormValues {
     role_id: number | '';
     expires_in_hours: number;
     permissions: string[];
+    legal_entity_ids: number[];
+    location_ids: number[];
 }
 
 const initialRoleId =
@@ -36,6 +41,8 @@ const form = useForm<UserFormValues>({
     role_id: initialRoleId,
     expires_in_hours: 48,
     permissions: props.user?.permissions ?? [],
+    legal_entity_ids: props.user?.legal_entity_ids ?? [],
+    location_ids: props.user?.location_ids ?? [],
 });
 
 const isEditing = computed(() => props.mode === 'edit');
@@ -46,6 +53,9 @@ const availablePermissionOptions = computed(() =>
     props.permissionOptions.filter((permission) =>
         permission.allowed_roles.includes(selectedRoleCode.value),
     ),
+);
+const showsOrganizationalScope = computed(
+    () => !['', 'superadmin', 'auditor'].includes(selectedRoleCode.value),
 );
 const submitLabel = computed(() =>
     isEditing.value ? 'Guardar cambios' : 'Enviar invitación',
@@ -70,6 +80,11 @@ watch(selectedRoleCode, () => {
     form.permissions = form.permissions.filter((permission) =>
         availableValues.has(permission),
     );
+
+    if (!showsOrganizationalScope.value) {
+        form.legal_entity_ids = [];
+        form.location_ids = [];
+    }
 });
 </script>
 
@@ -289,6 +304,41 @@ watch(selectedRoleCode, () => {
                         El rol seleccionado no admite permisos individuales.
                     </p>
                     <FieldError :message="form.errors.permissions" class="pt-3" />
+                </fieldset>
+
+                <fieldset v-if="showsOrganizationalScope">
+                    <legend class="text-sm font-semibold text-slate-950 dark:text-white">
+                        Alcance organizativo
+                    </legend>
+                    <p class="pt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                        Una razón social incluye todas sus sedes actuales y futuras.
+                        También podés asignar sedes específicas.
+                    </p>
+
+                    <div class="grid gap-6 pt-4 lg:grid-cols-2">
+                        <div>
+                            <h3 class="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Razones sociales</h3>
+                            <div class="grid gap-2 pt-3">
+                                <label v-for="entity in legalEntityOptions" :key="entity.value" class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+                                    <input v-model="form.legal_entity_ids" type="checkbox" :value="entity.value" class="size-4 accent-clinic-600" />
+                                    <span>{{ entity.label }}</span>
+                                </label>
+                                <p v-if="legalEntityOptions.length === 0" class="text-sm text-slate-500">No hay razones sociales activas.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">Sedes específicas</h3>
+                            <div class="grid gap-2 pt-3">
+                                <label v-for="location in locationOptions" :key="location.value" class="flex items-center gap-3 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-700">
+                                    <input v-model="form.location_ids" type="checkbox" :value="location.value" class="size-4 accent-clinic-600" />
+                                    <span>{{ location.label }}</span>
+                                </label>
+                                <p v-if="locationOptions.length === 0" class="text-sm text-slate-500">No hay sedes activas.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <FieldError :message="form.errors.legal_entity_ids" class="pt-3" />
+                    <FieldError :message="form.errors.location_ids" class="pt-2" />
                 </fieldset>
             </div>
 

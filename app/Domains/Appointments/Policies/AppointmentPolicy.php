@@ -7,9 +7,14 @@ use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 
 class AppointmentPolicy
 {
+    public function __construct(
+        private UserScopeService $scope,
+    ) {}
+
     public function viewAny(User $user): bool
     {
         return $user->hasPermission(UserPermission::ManageAppointments);
@@ -26,7 +31,10 @@ class AppointmentPolicy
         }
 
         if (! $user->hasRole(RoleCode::Professional)) {
-            return true;
+            return $this->scope->canAccessLocation(
+                $user,
+                (int) $appointment->location_id,
+            );
         }
 
         return $appointment->professional()
@@ -42,6 +50,7 @@ class AppointmentPolicy
     public function update(User $user, Appointment $appointment): bool
     {
         return $this->canAdministrativelyManage($user)
+            && $this->scope->canAccessLocation($user, (int) $appointment->location_id)
             && in_array($appointment->status, [
                 AppointmentStatus::Reserved,
                 AppointmentStatus::Confirmed,
@@ -51,13 +60,15 @@ class AppointmentPolicy
     public function changeStatus(User $user, Appointment $appointment): bool
     {
         return $this->canManage($user)
+            && $this->scope->canAccessLocation($user, (int) $appointment->location_id)
             && $this->isOwnedByProfessionalWhenRequired($user, $appointment)
             && $appointment->status->availableTransitions() !== [];
     }
 
     public function cancel(User $user, Appointment $appointment): bool
     {
-        return $this->canAdministrativelyManage($user);
+        return $this->canAdministrativelyManage($user)
+            && $this->scope->canAccessLocation($user, (int) $appointment->location_id);
     }
 
     public function delete(User $user, Appointment $appointment): bool

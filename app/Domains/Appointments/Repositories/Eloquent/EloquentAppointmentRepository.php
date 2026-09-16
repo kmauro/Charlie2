@@ -22,9 +22,9 @@ class EloquentAppointmentRepository implements AppointmentRepository
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, Appointment>
      */
-    public function paginate(array $filters, int $perPage, ?int $professionalId): LengthAwarePaginator
+    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds): LengthAwarePaginator
     {
-        return $this->scopedQuery($professionalId)
+        return $this->scopedQuery($professionalId, $locationIds)
             ->select([
                 'id',
                 'patient_id',
@@ -81,9 +81,9 @@ class EloquentAppointmentRepository implements AppointmentRepository
     }
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
-    public function summaries(?int $professionalId): array
+    public function summaries(?int $professionalId, ?array $locationIds): array
     {
-        $summary = $this->scopedQuery($professionalId)
+        $summary = $this->scopedQuery($professionalId, $locationIds)
             ->toBase()
             ->selectRaw('COUNT(*) as total')
             ->selectRaw(
@@ -115,7 +115,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
             'completed' => (int) ($summary->completed ?? 0),
             'cancelled' => (int) ($summary->cancelled ?? 0),
             'absent' => (int) ($summary->absent ?? 0),
-            'today' => $this->scopedQuery($professionalId)
+            'today' => $this->scopedQuery($professionalId, $locationIds)
                 ->whereDate('starts_at', today())
                 ->count(),
         ];
@@ -228,7 +228,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
     }
 
     /** @return Collection<int, Professional> */
-    public function activeProfessionals(?int $onlyProfessionalId = null): Collection
+    public function activeProfessionals(?int $onlyProfessionalId = null, ?array $locationIds = null): Collection
     {
         return Professional::query()
             ->select('id', 'user_id', 'specialty', 'appointment_duration_minutes')
@@ -252,6 +252,14 @@ class EloquentAppointmentRepository implements AppointmentRepository
                 $onlyProfessionalId !== null,
                 fn (Builder $query) => $query->whereKey($onlyProfessionalId),
             )
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereHas(
+                    'schedules',
+                    fn (Builder $scheduleQuery) => $scheduleQuery
+                        ->whereIn('location_id', $locationIds),
+                ),
+            )
             ->whereHas('user')
             ->orderBy('id')
             ->get()
@@ -260,11 +268,15 @@ class EloquentAppointmentRepository implements AppointmentRepository
     }
 
     /** @return Collection<int, Location> */
-    public function activeLocations(): Collection
+    public function activeLocations(?array $locationIds = null): Collection
     {
         return Location::query()
             ->select('id', 'name', 'code')
             ->where('status', OrganizationStatus::Active->value)
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereKey($locationIds),
+            )
             ->orderBy('name')
             ->get();
     }
@@ -278,12 +290,18 @@ class EloquentAppointmentRepository implements AppointmentRepository
         return $professionalId === null ? null : (int) $professionalId;
     }
 
-    private function scopedQuery(?int $professionalId): Builder
+    /** @param array<int, int>|null $locationIds */
+    private function scopedQuery(?int $professionalId, ?array $locationIds): Builder
     {
-        return Appointment::query()->when(
-            $professionalId !== null,
-            fn (Builder $query) => $query->where('professional_id', $professionalId),
-        );
+        return Appointment::query()
+            ->when(
+                $professionalId !== null,
+                fn (Builder $query) => $query->where('professional_id', $professionalId),
+            )
+            ->when(
+                $locationIds !== null,
+                fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            );
     }
 
     private function conflictQuery(

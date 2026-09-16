@@ -126,12 +126,26 @@ class PatientService
             $attributes = $this->patientAttributes($data, $lockedPatient->status);
             $attributes['lock_version'] = $lockedPatient->lock_version + 1;
 
+            if ($attributes['status'] !== $lockedPatient->status) {
+                $attributes['portal_access_until'] = $this->portalAccessUntil(
+                    $attributes['status'],
+                );
+            }
+
             $beforeValues = $this->patientAuditSnapshot($lockedPatient);
+            $statusChanged = $lockedPatient->status !== $attributes['status'];
             $updatedPatient = $this->patients->update(
                 $lockedPatient,
                 $attributes,
                 $this->contactAttributes($data['contacts'] ?? []),
             );
+            $afterValues = $this->patientAuditSnapshot($updatedPatient);
+
+            if ($statusChanged) {
+                $stateKeys = ['status', 'archived_at', 'previous_status'];
+                $beforeValues = Arr::except($beforeValues, $stateKeys);
+                $afterValues = Arr::except($afterValues, $stateKeys);
+            }
 
             if ($updatedPatient->user !== null) {
                 $this->users->updatePatientIdentity($updatedPatient->user, [
@@ -144,7 +158,7 @@ class PatientService
                 event: 'patient.updated',
                 auditable: $updatedPatient,
                 beforeValues: $beforeValues,
-                afterValues: $this->patientAuditSnapshot($updatedPatient),
+                afterValues: $afterValues,
                 actor: $actor,
                 context: $auditContext,
             );
@@ -171,19 +185,17 @@ class PatientService
                 ]);
             }
 
-            $beforeValues = $this->patientStatusAuditSnapshot($lockedPatient);
             $archivedPatient = $this->patients->setStatus(
                 $lockedPatient,
                 PatientStatus::Archived,
                 now(),
                 $lockedPatient->status,
+                now()->addMonthsNoOverflow(2),
             );
 
             $this->audit->record(
                 event: 'patient.archived',
                 auditable: $archivedPatient,
-                beforeValues: $beforeValues,
-                afterValues: $this->patientStatusAuditSnapshot($archivedPatient),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -217,19 +229,17 @@ class PatientService
                 $restoredStatus = PatientStatus::Active;
             }
 
-            $beforeValues = $this->patientStatusAuditSnapshot($lockedPatient);
             $restoredPatient = $this->patients->setStatus(
                 $lockedPatient,
                 $restoredStatus,
                 null,
                 null,
+                $this->portalAccessUntil($restoredStatus),
             );
 
             $this->audit->record(
                 event: 'patient.restored',
                 auditable: $restoredPatient,
-                beforeValues: $beforeValues,
-                afterValues: $this->patientStatusAuditSnapshot($restoredPatient),
                 actor: $actor,
                 context: $auditContext,
             );
@@ -346,19 +356,6 @@ class PatientService
         ];
     }
 
-    /**
-     * @return array{status: string, previous_status: string|null, archived_at: string|null, lock_version: int}
-     */
-    private function patientStatusAuditSnapshot(Patient $patient): array
-    {
-        return [
-            'status' => $patient->status->value,
-            'previous_status' => $patient->previous_status?->value,
-            'archived_at' => $patient->archived_at?->toISOString(),
-            'lock_version' => $patient->lock_version,
-        ];
-    }
-
     private function nullableSquishedString(mixed $value): ?string
     {
         return filled($value) ? Str::squish((string) $value) : null;
@@ -367,5 +364,12 @@ class PatientService
     private function nullableTrimmedString(mixed $value): ?string
     {
         return filled($value) ? trim((string) $value) : null;
+    }
+
+    private function portalAccessUntil(PatientStatus $status): ?\DateTimeInterface
+    {
+        return in_array($status, [PatientStatus::Active, PatientStatus::Inpatient], true)
+            ? null
+            : now()->addMonthsNoOverflow(2);
     }
 }

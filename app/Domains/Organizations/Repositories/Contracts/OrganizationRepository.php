@@ -26,7 +26,7 @@ interface OrganizationRepository
     public function legalEntities(bool $onlyActive = false): Collection;
 
     /** @return array{locations_total: int, locations_active: int, locations_preparation: int, locations_archived: int, legal_entities_total: int, legal_entities_active: int} */
-    public function summaries(): array;
+    public function summaries(?array $locationIds = null, ?array $legalEntityIds = null): array;
 
     public function findLegalEntityOrFail(int $id): LegalEntity;
 

@@ -2,6 +2,8 @@
 
 namespace App\Domains\Users\Requests;
 
+use App\Domains\Organizations\Models\LegalEntity;
+use App\Domains\Organizations\Models\Location;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
@@ -39,6 +41,10 @@ class UpdateUserRequest extends FormRequest
             'role_id' => ['required', 'integer', Rule::exists(Role::class, 'id')],
             'permissions' => ['array'],
             'permissions.*' => ['string', 'distinct', Rule::enum(UserPermission::class)],
+            'legal_entity_ids' => ['array'],
+            'legal_entity_ids.*' => ['integer', 'distinct', Rule::exists(LegalEntity::class, 'id')],
+            'location_ids' => ['array'],
+            'location_ids.*' => ['integer', 'distinct', Rule::exists(Location::class, 'id')],
         ];
     }
 
@@ -48,6 +54,8 @@ class UpdateUserRequest extends FormRequest
             'name' => Str::of((string) $this->input('name'))->squish()->toString(),
             'email' => Str::of((string) $this->input('email'))->trim()->lower()->toString(),
             'permissions' => $this->input('permissions', []),
+            'legal_entity_ids' => $this->input('legal_entity_ids', []),
+            'location_ids' => $this->input('location_ids', []),
         ]);
     }
 }

@@ -55,11 +55,13 @@ class AppointmentController extends Controller
             'search',
         ]);
         $professionalScope = $this->service->professionalScopeFor($actor);
+        $locationScope = $this->service->locationScopeFor($actor);
         $appointments = $this->service
             ->paginate(
                 $filters,
                 (int) ($validated['per_page'] ?? 15),
                 $professionalScope,
+                $locationScope,
             )
             ->appends($validated);
 
@@ -78,11 +80,11 @@ class AppointmentController extends Controller
                 ),
             ),
             'filters' => $filters,
-            'summaries' => $this->service->summaries($professionalScope),
+            'summaries' => $this->service->summaries($professionalScope, $locationScope),
             'statusOptions' => $this->statusOptions(),
             'typeOptions' => $this->typeOptions(),
-            'locationOptions' => $this->locationOptions(),
-            'professionalOptions' => $this->professionalOptions($professionalScope),
+            'locationOptions' => $this->locationOptions($locationScope),
+            'professionalOptions' => $this->professionalOptions($professionalScope, $locationScope),
             'permissions' => [
                 'create' => $actor->can('create', Appointment::class),
             ],
@@ -92,9 +94,10 @@ class AppointmentController extends Controller
     public function create(Request $request): Response
     {
         Gate::authorize('create', Appointment::class);
+        $actor = $this->authenticatedUser($request);
 
         return Inertia::render('appointments/views/Create', [
-            ...$this->formOptions(),
+            ...$this->formOptions($actor),
             'urls' => [
                 'index' => route('appointments.index'),
                 'store' => route('appointments.store'),
@@ -131,7 +134,7 @@ class AppointmentController extends Controller
 
         return Inertia::render('appointments/views/Edit', [
             'appointment' => $this->appointmentData($appointment, $actor),
-            ...$this->formOptions(),
+            ...$this->formOptions($actor),
             'urls' => [
                 'index' => route('appointments.index'),
                 'update' => route('appointments.update', $appointment),
@@ -193,12 +196,15 @@ class AppointmentController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function formOptions(): array
+    private function formOptions(User $actor): array
     {
+        $professionalScope = $this->service->professionalScopeFor($actor);
+        $locationScope = $this->service->locationScopeFor($actor);
+
         return [
             'patientOptions' => $this->patientOptions(),
-            'professionalOptions' => $this->professionalOptions(),
-            'locationOptions' => $this->locationOptions(),
+            'professionalOptions' => $this->professionalOptions($professionalScope, $locationScope),
+            'locationOptions' => $this->locationOptions($locationScope),
             'typeOptions' => $this->typeOptions(),
             'statusOptions' => $this->statusOptions(),
         ];
@@ -217,9 +223,11 @@ class AppointmentController extends Controller
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function professionalOptions(?int $professionalId = null): array
-    {
-        return $this->service->activeProfessionals($professionalId)
+    private function professionalOptions(
+        ?int $professionalId = null,
+        ?array $locationIds = null,
+    ): array {
+        return $this->service->activeProfessionals($professionalId, $locationIds)
             ->map(fn (Professional $professional): array => [
                 'value' => (int) $professional->getKey(),
                 'label' => $professional->user->name,
@@ -240,9 +248,9 @@ class AppointmentController extends Controller
     }
 
     /** @return array<int, array{value: int, label: string, code: string}> */
-    private function locationOptions(): array
+    private function locationOptions(?array $locationIds = null): array
     {
-        return $this->service->activeLocations()
+        return $this->service->activeLocations($locationIds)
             ->map(fn (Location $location): array => [
                 'value' => (int) $location->getKey(),
                 'label' => $location->name,

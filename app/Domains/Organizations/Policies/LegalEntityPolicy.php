@@ -5,9 +5,12 @@ namespace App\Domains\Organizations\Policies;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
+use App\Domains\Users\Services\UserScopeService;
 
 class LegalEntityPolicy
 {
+    public function __construct(private UserScopeService $scope) {}
+
     public function viewAny(User $user): bool
     {
         return $this->canView($user);
@@ -15,27 +18,31 @@ class LegalEntityPolicy
 
     public function view(User $user, LegalEntity $legalEntity): bool
     {
-        return $this->canView($user);
+        return $this->canView($user)
+            && $this->scope->canAccessLegalEntity($user, (int) $legalEntity->getKey());
     }
 
     public function create(User $user): bool
     {
-        return $this->canManage($user);
+        return $user->hasRole(RoleCode::SuperAdmin);
     }
 
     public function update(User $user, LegalEntity $legalEntity): bool
     {
-        return ! $legalEntity->isArchived() && $this->canManage($user);
+        return ! $legalEntity->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLegalEntity($user, (int) $legalEntity->getKey());
     }
 
     public function delete(User $user, LegalEntity $legalEntity): bool
     {
-        return ! $legalEntity->isArchived() && $this->canManage($user);
+        return ! $legalEntity->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLegalEntity($user, (int) $legalEntity->getKey());
     }
 
     public function restore(User $user, LegalEntity $legalEntity): bool
     {
-        return $legalEntity->isArchived() && $this->canManage($user);
+        return $legalEntity->isArchived() && $this->canManage($user)
+            && $this->scope->canAccessLegalEntity($user, (int) $legalEntity->getKey());
     }
 
     public function forceDelete(User $user, LegalEntity $legalEntity): bool

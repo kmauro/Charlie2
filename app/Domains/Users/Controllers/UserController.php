@@ -2,8 +2,11 @@
 
 namespace App\Domains\Users\Controllers;
 
-use App\Domains\Users\Enums\UserPermission;
+use App\Domains\Organizations\Enums\OrganizationStatus;
+use App\Domains\Organizations\Models\LegalEntity;
+use App\Domains\Organizations\Models\Location;
 use App\Domains\Users\Enums\RoleCode;
+use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Repositories\Contracts\RoleRepository;
@@ -48,6 +51,7 @@ class UserController extends Controller
         return Inertia::render('users/views/Create', [
             'roles' => $this->roleOptions(),
             'permissionOptions' => UserPermission::options(),
+            ...$this->scopeOptions(),
         ]);
     }
 
@@ -77,6 +81,7 @@ class UserController extends Controller
                     : null,
             ),
             'permissionOptions' => UserPermission::options(),
+            ...$this->scopeOptions(),
         ]);
     }
 
@@ -126,8 +131,7 @@ class UserController extends Controller
     private function roleOptions(
         ?RoleCode $fixedRole = null,
         bool $includeProfessional = false,
-    ): array
-    {
+    ): array {
         return $this->roles
             ->all()
             ->when(
@@ -156,6 +160,8 @@ class UserController extends Controller
      */
     private function userData(User $user): array
     {
+        $user->loadMissing(['legalEntities:id', 'locations:id']);
+
         return [
             'id' => $user->getKey(),
             'name' => $user->name,
@@ -170,9 +176,37 @@ class UserController extends Controller
                 'label' => $user->status->label(),
             ],
             'permissions' => $user->permissions ?? [],
+            'legal_entity_ids' => $user->legalEntities->modelKeys(),
+            'location_ids' => $user->locations->modelKeys(),
             'last_access_at' => $user->last_login_at?->toIso8601String(),
             'invitation_expires_at' => $user->invitation_expires_at?->toIso8601String(),
             'invitation_accepted_at' => $user->invitation_accepted_at?->toIso8601String(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function scopeOptions(): array
+    {
+        return [
+            'legalEntityOptions' => LegalEntity::query()
+                ->where('status', OrganizationStatus::Active->value)
+                ->whereNull('archived_at')
+                ->orderBy('business_name')
+                ->get(['id', 'business_name'])
+                ->map(fn (LegalEntity $entity): array => [
+                    'value' => (int) $entity->getKey(),
+                    'label' => $entity->business_name,
+                ])->all(),
+            'locationOptions' => Location::query()
+                ->where('status', OrganizationStatus::Active->value)
+                ->whereNull('archived_at')
+                ->orderBy('name')
+                ->get(['id', 'legal_entity_id', 'name'])
+                ->map(fn (Location $location): array => [
+                    'value' => (int) $location->getKey(),
+                    'legal_entity_id' => (int) $location->legal_entity_id,
+                    'label' => $location->name,
+                ])->all(),
         ];
     }
 }

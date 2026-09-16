@@ -38,6 +38,7 @@ class Patient extends Model
         'lock_version',
         'previous_status',
         'archived_at',
+        'portal_access_until',
     ];
 
     protected $attributes = [
@@ -76,6 +77,15 @@ class Patient extends Model
         return $this->status === PatientStatus::Archived;
     }
 
+    public function canAccessPortal(): bool
+    {
+        if (in_array($this->status, [PatientStatus::Active, PatientStatus::Inpatient], true)) {
+            return true;
+        }
+
+        return $this->portal_access_until?->isFuture() ?? false;
+    }
+
     protected static function newFactory(): PatientFactory
     {
         return PatientFactory::new();
@@ -102,6 +112,7 @@ class Patient extends Model
             'lock_version' => 'integer',
             'previous_status' => PatientStatus::class,
             'archived_at' => 'datetime',
+            'portal_access_until' => 'datetime',
         ];
     }
 }

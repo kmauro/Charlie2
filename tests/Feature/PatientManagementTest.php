@@ -1,5 +1,6 @@
 <?php
 
+use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Enums\RegisteredSex;
 use App\Domains\Patients\Models\Patient;
@@ -118,6 +119,10 @@ it('enforces the complete patient authorization matrix', function (
         'status' => PatientStatus::Archived,
         'archived_at' => now(),
     ]);
+
+    if ($role === RoleCode::Patient) {
+        Patient::factory()->for($actor)->create();
+    }
 
     expect($actor->can('viewAny', Patient::class))->toBe($abilities['viewAny'])
         ->and($actor->can('view', $patient))->toBe($abilities['view'])
@@ -564,6 +569,34 @@ it('lets reception edit administrative data without changing status', function (
     expect($patient->status)->toBe(PatientStatus::Inpatient);
 });
 
+it('starts and clears the two-month portal grace period when patient status changes', function () {
+    $actor = patientsActor(RoleCode::Administrator);
+    $patientUser = patientsActor(RoleCode::Patient);
+    $patient = Patient::factory()->for($patientUser)->create();
+
+    $this->actingAs($actor)
+        ->put(route('patients.update', $patient), validPatientPayload([
+            'document_number' => $patient->document_number,
+            'email' => $patientUser->email,
+            'lock_version' => $patient->lock_version,
+            'status' => PatientStatus::Blocked->value,
+        ]))
+        ->assertRedirect(route('patients.show', $patient));
+
+    $patient->refresh();
+    expect(abs($patient->portal_access_until?->diffInSeconds(now()->addMonthsNoOverflow(2)) ?? 999))->toBeLessThanOrEqual(1)
+        ->and($patientUser->fresh()->status)->toBe(UserStatus::Active);
+
+    $this->put(route('patients.update', $patient), validPatientPayload([
+        'document_number' => $patient->document_number,
+        'email' => $patientUser->email,
+        'lock_version' => $patient->lock_version,
+        'status' => PatientStatus::Active->value,
+    ]))->assertRedirect(route('patients.show', $patient));
+
+    expect($patient->refresh()->portal_access_until)->toBeNull();
+});
+
 it('blocks editing an archived patient until it is restored', function () {
     $actor = patientsActor(RoleCode::SuperAdmin);
     $patient = Patient::factory()->create([
@@ -605,7 +638,8 @@ it('blocks editing an archived patient until it is restored', function () {
 
 it('archives and restores a patient without deleting their information', function () {
     $actor = patientsActor(RoleCode::SuperAdmin);
-    $patient = Patient::factory()->create();
+    $patientUser = patientsActor(RoleCode::Patient);
+    $patient = Patient::factory()->for($patientUser)->create();
     $contact = $patient->contacts()->create([
         'full_name' => 'Contacto persistente',
         'relationship' => 'Hermano',
@@ -626,8 +660,12 @@ it('archives and restores a patient without deleting their information', functio
     expect($patient->status)
         ->toBe(PatientStatus::Archived)
         ->and($patient->archived_at)->not->toBeNull()
+        ->and(abs($patient->portal_access_until?->diffInSeconds(now()->addMonthsNoOverflow(2)) ?? 999))->toBeLessThanOrEqual(1)
+        ->and($patientUser->fresh()->status)->toBe(UserStatus::Active)
         ->and(Patient::query()->whereKey($patient->getKey())->exists())->toBeTrue()
-        ->and($patient->contacts()->whereKey($contact->getKey())->exists())->toBeTrue();
+        ->and($patient->contacts()->whereKey($contact->getKey())->exists())->toBeTrue()
+        ->and(AuditLog::query()->where('event', 'patient.archived')->sole()->before_values)->toBe([])
+        ->and(AuditLog::query()->where('event', 'patient.archived')->sole()->after_values)->toBe([]);
 
     $this->patch(route('patients.restore', $patient))
         ->assertRedirect(route('patients.index'))
@@ -638,6 +676,7 @@ it('archives and restores a patient without deleting their information', functio
     expect($patient->status)
         ->toBe(PatientStatus::Active)
         ->and($patient->archived_at)->toBeNull()
+        ->and($patient->portal_access_until)->toBeNull()
         ->and($patient->contacts()->whereKey($contact->getKey())->exists())->toBeTrue();
 });
 

@@ -42,9 +42,13 @@ class LoginRequest extends FormRequest
         }
 
         $user = Auth::user();
-        $user?->loadMissing('role');
+        $user?->loadMissing(['role', 'patient']);
 
-        if ($user === null || $user->status !== UserStatus::Active || $user->role === null) {
+        if (
+            $user === null
+            || $user->status !== UserStatus::Active
+            || ! $user->canAccessApplication()
+        ) {
             Auth::logout();
             RateLimiter::hit($this->throttleKey());
 
