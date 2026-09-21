@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Console\Commands;
+namespace App\Domains\Audits\Commands;
 
 use App\Domains\Audits\Mail\AuditRetentionWarningMail;
 use App\Domains\Audits\Models\AuditLog;

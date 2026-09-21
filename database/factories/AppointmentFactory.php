@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Appointments\Database\Factories;
+namespace Database\Factories;
 
 use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Enums\AppointmentType;

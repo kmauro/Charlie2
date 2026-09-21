@@ -3,7 +3,7 @@
 namespace App\Domains\Professionals\Models;
 
 use App\Domains\Organizations\Models\Location;
-use App\Domains\Professionals\Database\Factories\ProfessionalScheduleFactory;
+use Database\Factories\ProfessionalScheduleFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

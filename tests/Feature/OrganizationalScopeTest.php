@@ -6,12 +6,12 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserScopeService;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Testing\AssertableInertia as Assert;
 

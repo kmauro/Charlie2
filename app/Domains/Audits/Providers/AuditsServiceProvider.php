@@ -2,6 +2,7 @@
 
 namespace App\Domains\Audits\Providers;
 
+use App\Domains\Audits\Commands\PruneAuditLogs;
 use App\Domains\Audits\Repositories\Contracts\AuditLogRepository;
 use App\Domains\Audits\Repositories\Eloquent\EloquentAuditLogRepository;
 use Illuminate\Support\ServiceProvider;
@@ -17,6 +18,6 @@ class AuditsServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
+        $this->commands([PruneAuditLogs::class]);
     }
 }

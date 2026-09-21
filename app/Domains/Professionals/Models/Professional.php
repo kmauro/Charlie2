@@ -2,11 +2,11 @@
 
 namespace App\Domains\Professionals\Models;
 
-use App\Domains\Professionals\Database\Factories\ProfessionalFactory;
 use App\Domains\Professionals\Enums\OfficeAssignmentType;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Policies\ProfessionalPolicy;
 use App\Domains\Users\Models\User;
+use Database\Factories\ProfessionalFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

@@ -18,7 +18,6 @@ class PatientsServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
         Gate::policy(Patient::class, PatientPolicy::class);
     }
 }

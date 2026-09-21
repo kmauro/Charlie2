@@ -1,11 +1,11 @@
 <?php
 
-use App\Domains\Users\Database\Seeders\RoleSeeder;
-use App\Domains\Users\Database\Seeders\SuperAdminSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
+use Database\Seeders\RoleSeeder;
+use Database\Seeders\SuperAdminSeeder;
 use Illuminate\Support\Facades\Hash;
 
 it('uses the domain user model and its domain factory for authentication', function () {

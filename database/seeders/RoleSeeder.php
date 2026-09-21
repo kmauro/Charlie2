@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Users\Database\Seeders;
+namespace Database\Seeders;
 
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\Role;

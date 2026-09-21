@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Domains\Users\Database\Seeders\RoleSeeder;
-use App\Domains\Users\Database\Seeders\SuperAdminSeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 

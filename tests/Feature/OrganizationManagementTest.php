@@ -6,10 +6,10 @@ use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
+use Database\Seeders\RoleSeeder;
 use Inertia\Testing\AssertableInertia as Assert;
 
 beforeEach(function () {

@@ -7,11 +7,11 @@ use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
+use Database\Seeders\RoleSeeder;
 
 beforeEach(function () {
     $this->seed(RoleSeeder::class);

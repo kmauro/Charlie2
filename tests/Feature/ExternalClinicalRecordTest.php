@@ -5,7 +5,7 @@ use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Schema;
 use Inertia\Testing\AssertableInertia as Assert;
 

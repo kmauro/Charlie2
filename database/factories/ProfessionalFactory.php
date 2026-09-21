@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Professionals\Database\Factories;
+namespace Database\Factories;
 
 use App\Domains\Professionals\Enums\OfficeAssignmentType;
 use App\Domains\Professionals\Enums\ProfessionalStatus;

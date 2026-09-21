@@ -2,13 +2,13 @@
 
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Mail\UserInvitationMail;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Inertia\Support\SessionKey;

@@ -2,9 +2,9 @@
 
 namespace App\Domains\Organizations\Models;
 
-use App\Domains\Organizations\Database\Factories\LegalEntityFactory;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Policies\LegalEntityPolicy;
+use Database\Factories\LegalEntityFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

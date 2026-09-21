@@ -2,8 +2,8 @@
 
 namespace App\Domains\Users\Models;
 
-use App\Domains\Users\Database\Factories\RoleFactory;
 use App\Domains\Users\Enums\RoleCode;
+use Database\Factories\RoleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Database\Seeder;
 
 arch('domain controllers stay inside their domain layer')
     ->expect([
@@ -19,12 +21,32 @@ arch('the application does not depend on the legacy user model namespace')
     ->expect('App')
     ->not->toUse('App\Models\User');
 
-arch('user domain factories stay inside their database layer')
-    ->expect('App\Domains\Users\Database\Factories')
+arch('factories use the default Laravel database namespace')
+    ->expect('Database\Factories')
     ->toHaveSuffix('Factory')
-    ->toExtend(Illuminate\Database\Eloquent\Factories\Factory::class);
+    ->toExtend(Factory::class);
 
-arch('user domain seeders stay inside their database layer')
-    ->expect('App\Domains\Users\Database\Seeders')
+arch('seeders use the default Laravel database namespace')
+    ->expect('Database\Seeders')
     ->toHaveSuffix('Seeder')
-    ->toExtend(Illuminate\Database\Seeder::class);
+    ->toExtend(Seeder::class);
+
+it('keeps database artifacts outside the domain directories', function () {
+    $projectRoot = dirname(__DIR__, 2);
+    $domainFiles = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator(
+            $projectRoot.'/app/Domains',
+            FilesystemIterator::SKIP_DOTS,
+        ),
+    );
+    $domainDatabaseFiles = collect(iterator_to_array($domainFiles, false))
+        ->filter(fn (SplFileInfo $file): bool => str_contains(
+            str_replace('\\', '/', $file->getPathname()),
+            '/Database/',
+        ));
+
+    expect($domainDatabaseFiles)->toBeEmpty()
+        ->and(glob($projectRoot.'/database/factories/*.php'))->not->toBeEmpty()
+        ->and(glob($projectRoot.'/database/migrations/*.php'))->not->toBeEmpty()
+        ->and(glob($projectRoot.'/database/seeders/*.php'))->not->toBeEmpty();
+});

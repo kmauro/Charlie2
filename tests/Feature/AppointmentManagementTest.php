@@ -11,12 +11,12 @@ use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use Carbon\CarbonInterface;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Facades\Route;
 use Inertia\Testing\AssertableInertia as Assert;
 

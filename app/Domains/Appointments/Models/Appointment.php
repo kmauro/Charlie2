@@ -2,7 +2,6 @@
 
 namespace App\Domains\Appointments\Models;
 
-use App\Domains\Appointments\Database\Factories\AppointmentFactory;
 use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Enums\AppointmentType;
 use App\Domains\Appointments\Policies\AppointmentPolicy;
@@ -10,6 +9,7 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Users\Models\User;
+use Database\Factories\AppointmentFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

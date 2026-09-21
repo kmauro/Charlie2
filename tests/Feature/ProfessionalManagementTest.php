@@ -7,11 +7,11 @@ use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
 use App\Domains\Professionals\Repositories\Contracts\ProfessionalRepository;
-use App\Domains\Users\Database\Seeders\RoleSeeder;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
+use Database\Seeders\RoleSeeder;
 use Illuminate\Database\QueryException;
 use Inertia\Testing\AssertableInertia as Assert;
 
@@ -87,8 +87,7 @@ function validProfessionalUpdatePayload(
     Professional $professional,
     array $overrides = [],
     ?array $locations = null,
-): array
-{
+): array {
     $professional->loadMissing('user');
     $locations ??= professionalScheduleLocations();
 

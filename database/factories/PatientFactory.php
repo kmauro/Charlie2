@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Patients\Database\Factories;
+namespace Database\Factories;
 
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Enums\RegisteredSex;

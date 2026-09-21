@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Users;
+namespace App\Domains\Users\Providers;
 
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Policies\UserPolicy;
@@ -23,7 +23,6 @@ class UsersServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/Database/Migrations');
         Gate::policy(User::class, UserPolicy::class);
     }
 }

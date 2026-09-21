@@ -2,9 +2,9 @@
 
 namespace App\Domains\Organizations\Models;
 
-use App\Domains\Organizations\Database\Factories\LocationFactory;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Policies\LocationPolicy;
+use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;

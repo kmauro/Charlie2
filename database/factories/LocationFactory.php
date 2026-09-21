@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Organizations\Database\Factories;
+namespace Database\Factories;
 
 use App\Domains\Organizations\Enums\LocationService;
 use App\Domains\Organizations\Enums\OrganizationStatus;

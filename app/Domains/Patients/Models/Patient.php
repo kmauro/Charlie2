@@ -2,11 +2,11 @@
 
 namespace App\Domains\Patients\Models;
 
-use App\Domains\Patients\Database\Factories\PatientFactory;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Enums\RegisteredSex;
 use App\Domains\Patients\Policies\PatientPolicy;
 use App\Domains\Users\Models\User;
+use Database\Factories\PatientFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;

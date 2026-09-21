@@ -2,7 +2,7 @@
 
 namespace App\Domains\Patients\Models;
 
-use App\Domains\Patients\Database\Factories\PatientContactFactory;
+use Database\Factories\PatientContactFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

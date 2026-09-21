@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Domains\Patients\Database\Factories;
+namespace Database\Factories;
 
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Patients\Models\PatientContact;
