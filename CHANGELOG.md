@@ -1,16 +1,45 @@
 # Registro de cambios de Charlie2
 
-Este archivo reconstruye la evolución funcional del proyecto a partir de los chats vinculados, las migraciones, las rutas y el código disponible. Como esta copia no contiene un repositorio Git reconocible ni versiones publicadas, las fechas corresponden a las entregas registradas en las conversaciones y no a *releases* etiquetadas.
+Este archivo registra la evolución funcional y técnica del proyecto a partir del repositorio Git, las migraciones, las rutas, las verificaciones automatizadas y las validaciones funcionales informadas.
 
 Las funcionalidades que fueron reemplazadas se conservan en su fecha histórica y se señalan en la entrada posterior que las retiró.
 
 ## Sin publicar
 
+### Agregado
+
+- Se incorporó una imagen Docker multietapa con frontend compilado en Node 24 y runtime PHP 8.5 con Apache.
+- Se agregó una composición local con servicios separados para aplicación web, worker de colas, scheduler, MySQL 8.4 y Mailpit.
+- Se añadieron healthchecks, volúmenes persistentes, migraciones automáticas en el servicio web, generación compartida de `APP_KEY` y optimización automática en producción.
+- Se documentaron variables `DOCKER_*` para puertos, base de datos y correo sin incluir secretos productivos en el repositorio.
+
+### Cambiado
+
+- El dashboard dejó de usar métricas sintéticas incompatibles con sus pruebas y pasó a consultar datos operativos.
+- Los permisos individuales se aplican en las policies respetando los roles habilitados y el superadministrador conserva acceso global.
+- El acceso clínico externo exige una relación asistencial dentro de la ventana temporal acordada y contempla profesionales y encargados según su alcance.
+- Los usuarios pueden recibir alcance sobre múltiples sedes y razones sociales; los listados y operaciones quedan limitados por ese alcance.
+- Archivar un paciente no suspende su cuenta y mantiene el acceso al portal durante dos meses.
+- El backend quedó organizado por dominio bajo `app/Domains`, mientras factories, migraciones y seeders usan las carpetas estándar de Laravel bajo `database`.
+
+### Auditoría y seguridad
+
+- Se incorporaron eventos de autenticación, usuarios y profesionales, interfaz de consulta, filtros y exportación exclusiva del auditor.
+- Se agregó retención anual con aviso por correo a los auditores activos antes de eliminar registros vencidos.
+- Se añadió recuperación de contraseña para cuentas activas, con notificación en cola y límites de intentos.
+
+### Verificación
+
+- Pasaron 173 pruebas automatizadas con 1728 aserciones.
+- Pasaron el chequeo de TypeScript y el build frontend de producción.
+- Se verificaron 59 rutas de aplicación y 21 migraciones versionadas.
+- El build Docker finalizó correctamente y se probaron migraciones y login dentro de los contenedores, según validación funcional del 24 de septiembre de 2026.
+
 ### Pendiente conocido
 
-- Resolver la discrepancia del dashboard: la interfaz entrega métricas sintéticas en cero mientras una prueba automatizada espera otros valores.
 - Definir el contrato productivo con la webapp clínica externa, incluida la autenticación, la autorización final y el contexto seguro del paciente.
-- Aplicar efectivamente los permisos individuales en las políticas; actualmente se almacenan, pero la autorización se basa principalmente en roles y relación asistencial.
+- Completar la prueba integral Docker del worker, scheduler, entrega de correo en Mailpit y persistencia después de reiniciar los contenedores.
+- Implementar autenticación multifactor y continuar los módulos funcionales posteriores según `PLAN_PROYECTO.md`.
 
 ## 7 de septiembre de 2026
 

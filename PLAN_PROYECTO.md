@@ -1,19 +1,23 @@
 # Plan del proyecto HIS
 
-> [Cierta] Nota de traspaso del 7 de septiembre de 2026: este plan conserva su contenido y fecha de referencia originales. Para el estado contrastado con el código, verificaciones recientes y diferencias entre requisitos e implementación, consultar [TRASPASO.md](TRASPASO.md). La instalación está en [README.md](README.md), las reglas implementadas en [ARQUITECTURA.md](ARQUITECTURA.md) y el mantenimiento en [OPERACION.md](OPERACION.md).
+> [Cierta] Estado actualizado al 24 de septiembre de 2026. Para el detalle de verificaciones, límites operativos y continuidad consultar [TRASPASO.md](TRASPASO.md). La instalación está en [README.md](README.md), las reglas implementadas en [ARQUITECTURA.md](ARQUITECTURA.md) y el mantenimiento en [OPERACION.md](OPERACION.md).
 
 ## Estado del documento
 
 - Estado: núcleo administrativo consolidado e integración clínica externa básica implementada.
-- Fecha de actualización: 24 de agosto de 2026.
+- Fecha de actualización: 24 de septiembre de 2026.
 - Fase actual: estabilización de los módulos implementados y definición del contrato definitivo con la webapp clínica externa.
 - Registro: exclusivamente mediante invitación del superadministrador.
 - Acceso clínico: la información clínica se administrará exclusivamente en una webapp externa; este sistema sólo ofrecerá un enlace autorizado hacia ella.
 - Estado técnico verificado:
-  - 53 rutas de aplicación y 18 migraciones aplicadas después de reconstruir y sembrar la base de datos.
+  - 59 rutas de aplicación y 21 migraciones versionadas.
   - Frontend TypeScript y build de producción aprobados.
-  - 147 de 148 pruebas automatizadas aprobadas; las 7 pruebas focalizadas del acceso clínico externo están aprobadas.
-  - Existe una discrepancia pendiente entre las métricas sintéticas del dashboard y su prueba automatizada.
+  - 173 pruebas automatizadas y 1728 aserciones aprobadas.
+  - Dashboard conectado a métricas operativas y contrato de prueba estabilizado.
+  - Permisos individuales, alcance por múltiples sedes y razones sociales, vigencia asistencial, recuperación de contraseña y ciclo de acceso del paciente estabilizados.
+  - Auditoría con consulta, exportación, retención anual y aviso previo por correo implementada.
+  - Imagen Docker construida correctamente; migraciones y acceso por login verificados en contenedores según validación funcional del 24 de septiembre de 2026.
+  - Quedan pendientes las pruebas integrales de cola, scheduler, entrega en Mailpit y persistencia tras reinicios.
   - El esquema no contiene tablas, adjuntos ni alertas de historia clínica interna.
 
 ## 1. Objetivo
@@ -52,13 +56,13 @@ La primera fase contempló:
 ### Avance verificado
 
 - Autenticación: implementada, incluido el registro mediante invitaciones firmadas, temporales y de un solo uso.
-- Dashboard: interfaz implementada con datos sintéticos; queda pendiente resolver su contrato de prueba y conectarlo con datos operativos cuando corresponda.
-- Usuarios: gestión, roles, permisos individuales, suspensión, restauración y reinvitación implementados.
+- Dashboard: interfaz implementada con métricas operativas y pruebas coherentes.
+- Usuarios: gestión, roles, permisos individuales efectivos, suspensión, restauración, reinvitación, recuperación de contraseña y alcance por múltiples sedes y razones sociales implementados.
 - Profesionales: gestión, matrícula, especialidad, duración de turnos, horarios por sede y modalidad de consultorio implementados.
 - Pacientes: gestión administrativa, contactos, cobertura, estados, archivado y control de concurrencia implementados.
 - Razones sociales y sedes: persistencia, validación, archivado y restauración implementados.
 - Turnos: núcleo funcional implementado, aunque originalmente pertenecía a una fase posterior.
-- Auditoría: base append-only e integración parcial con pacientes, organizaciones, turnos y accesos clínicos implementadas.
+- Auditoría: base append-only, eventos de autenticación y dominios estabilizados, consulta, filtros, exportación exclusiva del auditor y retención anual con aviso por correo implementados.
 - Historia clínica interna: retirada del código, las rutas, la interfaz, las migraciones, las pruebas y la base de datos.
 - Acceso clínico externo: implementado desde la ficha del paciente para profesionales con relación asistencial vigente, mediante una URL HTTPS configurable y con auditoría de accesos permitidos, denegados y fallos de configuración.
 
@@ -81,6 +85,20 @@ La interfaz puede incluir formularios, tarjetas y datos sintéticos mínimos par
   - Fechas: DD/MM/AAAA.
   - Documento: DNI.
   - Identificación fiscal: CUIT.
+
+### Contenedores Docker
+
+- `Dockerfile` multietapa con Node 24 para los recursos frontend y PHP 8.5 con Apache para la aplicación.
+- Una misma definición de build local se reutiliza para los servicios `app`, `worker` y `scheduler`.
+- `app` publica el puerto 8080, espera a MySQL y ejecuta las migraciones automáticamente.
+- `worker` procesa las notificaciones e invitaciones en cola mediante la conexión de base de datos.
+- `scheduler` mantiene activo `php artisan schedule:work`, incluida la limpieza anual de auditoría.
+- MySQL 8.4 conserva los datos en un volumen y se publica localmente en el puerto 3307.
+- Mailpit recibe el correo de desarrollo por SMTP en el puerto interno 1025 y expone su interfaz en el puerto 8025.
+- El almacenamiento de Laravel se comparte mediante un volumen persistente entre los procesos de aplicación.
+- Si `APP_KEY` no está definida, el entrypoint genera y conserva una clave compartida en el volumen de almacenamiento.
+- La imagen activa `php artisan optimize` cuando `DOCKER_APP_ENV=production`.
+- Las variables `DOCKER_*` están documentadas en `.env.example`; las credenciales productivas deberán inyectarse mediante un canal seguro.
 
 ## 4. Organización, razones sociales y sedes
 
@@ -401,6 +419,8 @@ El registro:
 - Registrará actor, recurso, acción, fecha, origen, resultado, motivo y correlación.
 - Tendrá acceso exclusivo del auditor.
 - Auditará también las consultas realizadas sobre la propia auditoría.
+- Conservará los registros durante un año y notificará por correo a los auditores activos antes de ejecutar la limpieza programada.
+- Permitirá consultar y exportar la auditoría exclusivamente al auditor.
 
 ### Acceso excepcional de emergencia
 
@@ -433,11 +453,6 @@ app/
         Contracts/
         Eloquent/
       Policies/
-      Database/
-        Migrations/
-        Factories/
-        Seeders/
-      Routes/
     Professionals/
       ...
     Patients/
@@ -452,6 +467,10 @@ app/
       Controllers/
       Services/
       Contracts/
+database/
+  factories/
+  migrations/
+  seeders/
 ```
 
 Los nombres de carpetas PHP usarán `TitleCase` para respetar PSR-4. Los nombres visibles y las rutas continuarán en español.
@@ -512,8 +531,8 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 
 ## 17. Estado de fases y trabajo pendiente
 
-1. Razones sociales y sedes: implementado; queda pendiente el alcance de usuarios por sede y razón social.
-2. Usuarios y permisos configurables: implementado; autenticación multifactor pendiente.
+1. Razones sociales y sedes: implementado, incluido el alcance de usuarios sobre múltiples sedes y razones sociales.
+2. Usuarios y permisos configurables: implementados y aplicados en las policies; autenticación multifactor pendiente.
 3. Profesionales: núcleo implementado; descansos, feriados, licencias, excepciones y catálogo operativo de consultorios pendientes.
 4. Pacientes y responsables: gestión administrativa y acceso externo básico implementados; vinculación federada o contextual con la webapp externa pendiente.
 5. Turnos: núcleo implementado; sobreturnos, lista de espera, bloqueos, recurrencia y autogestión pendientes.
@@ -523,15 +542,16 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 9. Facturación, pagos y cajas: pendiente.
 10. Planes de prestaciones: pendiente.
 11. Notificaciones administrativas externas: pendiente.
-12. Auditoría avanzada, monitoreo e interoperabilidad: parcialmente implementado.
+12. Auditoría avanzada: consulta, filtros, exportación, retención anual y aviso por correo implementados; monitoreo e interoperabilidad continúan pendientes.
+13. Operación Docker: build, migraciones y login verificados; cola, scheduler, Mailpit y persistencia después de reinicios pendientes de prueba integral.
 
 ### Prioridades inmediatas
 
-1. Resolver la prueba pendiente del dashboard y definir si sus métricas serán reales o sintéticas.
-2. Definir con el proveedor el contrato técnico, autenticación, autorización, disponibilidad y soporte de la webapp externa.
-3. Reemplazar la URL de demostración por la URL productiva y validar el flujo de extremo a extremo.
-4. Implementar el mecanismo federado o temporal acordado sin exponer datos sensibles en la URL.
-5. Completar auditoría de autenticación, usuarios, permisos y profesionales.
+1. Definir con el proveedor el contrato técnico, autenticación, autorización, disponibilidad y soporte de la webapp externa.
+2. Reemplazar la URL de demostración por la URL productiva y validar el flujo de extremo a extremo.
+3. Implementar el mecanismo federado o temporal acordado sin exponer datos sensibles en la URL.
+4. Completar la prueba integral Docker de cola, scheduler, Mailpit y persistencia tras reinicios.
+5. Priorizar autenticación multifactor, agenda avanzada y evolución de turnos antes de iniciar los módulos operativos y contables posteriores.
 
 ## 18. Decisiones de acceso confirmadas
 
