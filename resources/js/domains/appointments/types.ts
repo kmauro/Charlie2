@@ -152,6 +152,18 @@ export interface AppointmentFormData {
     procedure_resources?: string[];
     procedure_preparation?: string;
     lock_version?: number;
+    recurrence_frequency?: 'weekly' | 'biweekly' | 'monthly';
+    recurrence_ends_on?: string;
+    recurrence_occurrences?: number | '';
+}
+
+export interface AppointmentInitialValues {
+    patient_id?: number;
+    professional_id?: number | null;
+    location_id?: number | null;
+    starts_at?: string;
+    type?: string;
+    reason?: string | null;
 }
 
 export type AppointmentsPaginator = Paginator<AppointmentListItem>;

@@ -8,6 +8,7 @@ use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Appointments\Requests\CancelAppointmentRequest;
 use App\Domains\Appointments\Requests\ChangeAppointmentStatusRequest;
 use App\Domains\Appointments\Requests\StoreAppointmentRequest;
+use App\Domains\Appointments\Requests\StoreRecurringAppointmentRequest;
 use App\Domains\Appointments\Requests\UpdateAppointmentRequest;
 use App\Domains\Appointments\Services\AppointmentService;
 use App\Domains\Audits\Data\AuditContext;
@@ -103,6 +104,7 @@ class AppointmentController extends Controller
             'urls' => [
                 'index' => route('appointments.index'),
                 'store' => route('appointments.store'),
+                'recurringStore' => route('appointments.recurring.store'),
             ],
         ]);
     }
@@ -117,6 +119,18 @@ class AppointmentController extends Controller
             $this->auditContext($request),
         );
         Inertia::flash('success', 'El turno fue creado correctamente.');
+
+        return redirect()->route('appointments.index');
+    }
+
+    public function storeRecurring(StoreRecurringAppointmentRequest $request): RedirectResponse
+    {
+        $this->service->createRecurring(
+            $request->validated(),
+            $this->authenticatedUser($request),
+            $this->auditContext($request),
+        );
+        Inertia::flash('success', 'La serie de turnos fue creada correctamente.');
 
         return redirect()->route('appointments.index');
     }

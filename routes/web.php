@@ -1,6 +1,7 @@
 <?php
 
 use App\Domains\Appointments\Controllers\AppointmentController;
+use App\Domains\Appointments\Controllers\AppointmentWaitlistController;
 use App\Domains\Audits\Controllers\AuditLogController;
 use App\Domains\Auth\Controllers\AuthenticatedSessionController;
 use App\Domains\Auth\Controllers\NewPasswordController;
@@ -126,9 +127,17 @@ Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void 
         Route::get('/', 'index')->name('index');
         Route::get('/crear', 'create')->name('create');
         Route::post('/', 'store')->name('store');
+        Route::post('/recurrentes', 'storeRecurring')->name('recurring.store');
         Route::get('/{appointment}/editar', 'edit')->name('edit');
         Route::put('/{appointment}', 'update')->name('update');
         Route::patch('/{appointment}/estado', 'updateStatus')->name('status');
         Route::patch('/{appointment}/cancelar', 'cancel')->name('cancel');
+    });
+
+    Route::controller(AppointmentWaitlistController::class)->prefix('lista-espera')->name('appointments.waitlist.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::get('/{waitlistEntry}/asignar', 'createSchedule')->name('schedule.create');
+        Route::post('/{waitlistEntry}/asignar', 'schedule')->name('schedule.store');
     });
 });

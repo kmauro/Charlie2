@@ -6,6 +6,8 @@ use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Enums\AppointmentType;
 use App\Domains\Appointments\Models\AgendaBlock;
 use App\Domains\Appointments\Models\Appointment;
+use App\Domains\Appointments\Models\AppointmentSeries;
+use App\Domains\Appointments\Models\AppointmentWaitlistEntry;
 use App\Domains\Appointments\Repositories\Contracts\AppointmentRepository;
 use App\Domains\Audits\Data\AuditContext;
 use App\Domains\Audits\Services\AuditService;
@@ -196,8 +198,9 @@ class AppointmentService
         array $data,
         User $actor,
         AuditContext $auditContext,
+        ?int $seriesId = null,
     ): Appointment {
-        return DB::transaction(function () use ($data, $actor, $auditContext): Appointment {
+        return DB::transaction(function () use ($data, $actor, $auditContext, $seriesId): Appointment {
             [$patient, $professional, $location] = $this->lockReferences($data);
             $this->ensureLocationAccess($actor, $location);
             [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
@@ -225,6 +228,7 @@ class AppointmentService
                     $durationMinutes,
                     $room,
                     $professional,
+                    $seriesId,
                 ),
             );
 
@@ -238,6 +242,125 @@ class AppointmentService
 
             return $appointment;
         }, 3);
+    }
+
+    /** @param array<string, mixed> $data */
+    public function createRecurring(array $data, User $actor, AuditContext $auditContext): AppointmentSeries
+    {
+        return DB::transaction(function () use ($data, $actor, $auditContext): AppointmentSeries {
+            $series = AppointmentSeries::query()->create([
+                'patient_id' => $data['patient_id'], 'professional_id' => $data['professional_id'],
+                'location_id' => $data['location_id'], 'consulting_room_id' => $data['consulting_room_id'] ?: null,
+                'type' => $data['type'], 'frequency' => $data['recurrence_frequency'],
+                'ends_on' => $data['recurrence_ends_on'] ?? null,
+                'occurrences' => $data['recurrence_occurrences'] ?? null,
+                'duration_minutes' => $data['requested_duration_minutes'] ?? null,
+                'procedure_resources' => $data['procedure_resources'] ?? null,
+                'procedure_preparation' => $data['procedure_preparation'] ?? null,
+            ]);
+
+            $start = CarbonImmutable::parse((string) $data['starts_at']);
+            $endsOn = isset($data['recurrence_ends_on']) && $data['recurrence_ends_on'] !== null
+                ? CarbonImmutable::parse((string) $data['recurrence_ends_on'])->endOfDay()
+                : null;
+            $occurrences = (int) ($data['recurrence_occurrences'] ?? 52);
+
+            for ($index = 0; $index < $occurrences && ($endsOn === null || $start->lte($endsOn)); $index++) {
+                $this->create([...$data, 'starts_at' => $start->format('Y-m-d\\TH:i')], $actor, $auditContext, (int) $series->getKey());
+                $start = match ($data['recurrence_frequency']) {
+                    'weekly' => $start->addWeek(),
+                    'biweekly' => $start->addWeeks(2),
+                    'monthly' => $start->addMonthNoOverflow(),
+                };
+            }
+
+            $this->audit->record(event: 'appointment.series_created', auditable: $series, actor: $actor, context: $auditContext);
+
+            return $series;
+        }, 3);
+    }
+
+    /** @param array<string, mixed> $data */
+    public function createFromWaitlist(AppointmentWaitlistEntry $entry, array $data, User $actor, AuditContext $auditContext): Appointment
+    {
+        return DB::transaction(function () use ($entry, $data, $actor, $auditContext): Appointment {
+            $lockedEntry = AppointmentWaitlistEntry::query()->lockForUpdate()->findOrFail($entry->getKey());
+            if ($lockedEntry->status !== 'waiting') {
+                throw ValidationException::withMessages(['waitlist' => 'Esta solicitud ya fue asignada o cerrada.']);
+            }
+
+            $appointment = $this->create([...$data, 'patient_id' => $lockedEntry->patient_id], $actor, $auditContext);
+            $lockedEntry->update(['status' => 'scheduled', 'confirmed_by' => $actor->getKey(), 'confirmed_at' => now()]);
+
+            $this->audit->record(event: 'appointment.waitlist_scheduled', auditable: $appointment, actor: $actor, context: $auditContext);
+
+            return $appointment;
+        }, 3);
+    }
+
+    /**
+     * @return array{patient_id: int, professional_id: int, location_id: int, starts_at: string, type: string}|null
+     */
+    public function nextAvailableWaitlistSlot(AppointmentWaitlistEntry $entry): ?array
+    {
+        if ($entry->professional_id === null) {
+            return null;
+        }
+
+        $patient = Patient::query()->find($entry->patient_id);
+        $professional = Professional::query()->with('schedules.breaks')->find($entry->professional_id);
+
+        if ($patient === null || $professional === null) {
+            return null;
+        }
+
+        $startingDate = CarbonImmutable::parse($entry->desired_from ?? now())->startOfDay();
+        $type = AppointmentType::from($entry->type);
+
+        for ($dayOffset = 0; $dayOffset < 90; $dayOffset++) {
+            $date = $startingDate->addDays($dayOffset);
+            $schedules = $professional->schedules
+                ->where('weekday', $date->dayOfWeekIso)
+                ->when($entry->location_id !== null, fn (Collection $items) => $items->where('location_id', $entry->location_id))
+                ->sortBy('start_time');
+
+            foreach ($schedules as $schedule) {
+                if ($schedule->location_id === null) {
+                    continue;
+                }
+
+                $location = Location::query()->find($schedule->location_id);
+                if ($location === null) {
+                    continue;
+                }
+
+                $duration = $type === AppointmentType::Procedure
+                    ? $professional->appointment_duration_minutes
+                    : $professional->appointment_duration_minutes;
+                $firstSlot = CarbonImmutable::parse($date->toDateString().' '.$schedule->start_time, $location->timezone ?: config('app.timezone'));
+                $lastSlot = CarbonImmutable::parse($date->toDateString().' '.$schedule->end_time, $location->timezone ?: config('app.timezone'));
+
+                for ($startsAt = $firstSlot; $startsAt->addMinutes($duration)->lte($lastSlot); $startsAt = $startsAt->addMinutes($duration)) {
+                    try {
+                        $endsAt = $startsAt->addMinutes($duration);
+                        $this->ensureCanSchedule($patient, $professional, $location, $startsAt, $endsAt, null, false, $type);
+                        $this->resolveConsultingRoom(['type' => $type->value], $professional, $location, $startsAt, $endsAt);
+
+                        return [
+                            'patient_id' => (int) $patient->getKey(),
+                            'professional_id' => (int) $professional->getKey(),
+                            'location_id' => (int) $location->getKey(),
+                            'starts_at' => $startsAt->format('Y-m-d\\TH:i'),
+                            'type' => $type->value,
+                        ];
+                    } catch (ValidationException) {
+                        continue;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $data */
@@ -680,10 +803,12 @@ class AppointmentService
         int $durationMinutes,
         ?ConsultingRoom $room,
         Professional $professional,
+        ?int $seriesId = null,
     ): array {
         $type = AppointmentType::from((string) $data['type']);
 
         return [
+            'appointment_series_id' => $seriesId,
             'patient_id' => (int) $data['patient_id'],
             'professional_id' => (int) $data['professional_id'],
             'location_id' => (int) $data['location_id'],

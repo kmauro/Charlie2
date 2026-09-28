@@ -2,6 +2,7 @@
 import type {
     AppointmentFormData,
     AppointmentFormRecord,
+    AppointmentInitialValues,
     AppointmentLocationOption,
     AppointmentRoomOption,
     AppointmentAgendaConstraints,
@@ -27,6 +28,8 @@ const props = withDefaults(
         appointment?: AppointmentFormRecord;
         indexUrl?: string;
         submitUrl: string;
+        recurringSubmitUrl?: string;
+        initialValues?: AppointmentInitialValues;
     }>(),
     {
         roomOptions: () => [],
@@ -38,6 +41,8 @@ const props = withDefaults(
         statusOptions: () => [],
         appointment: undefined,
         indexUrl: '/turnos',
+        recurringSubmitUrl: undefined,
+        initialValues: undefined,
     },
 );
 
@@ -50,7 +55,7 @@ const localDateValue = (date: Date = new Date()): string => {
     return localDate.toISOString().slice(0, 10);
 };
 
-const initialStart = props.appointment?.starts_at
+const initialStart = (props.appointment?.starts_at ?? props.initialValues?.starts_at ?? '')
     .replace(' ', 'T')
     .slice(0, 16) ?? '';
 const minimumDate = localDateValue();
@@ -58,18 +63,21 @@ const appointmentDate = ref(initialStart.slice(0, 10) || minimumDate);
 const appointmentTime = ref(initialStart.slice(11, 16));
 
 const form = useForm<AppointmentFormData>({
-    patient_id: props.appointment?.patient.id ?? '',
-    professional_id: props.appointment?.professional.id ?? '',
-    location_id: props.appointment?.location.id ?? '',
+    patient_id: props.appointment?.patient.id ?? props.initialValues?.patient_id ?? '',
+    professional_id: props.appointment?.professional.id ?? props.initialValues?.professional_id ?? '',
+    location_id: props.appointment?.location.id ?? props.initialValues?.location_id ?? '',
     starts_at: initialStart,
-    type: props.appointment?.type.value ?? props.typeOptions[0]?.value ?? 'in_person',
+    type: props.appointment?.type.value ?? props.initialValues?.type ?? props.typeOptions[0]?.value ?? 'in_person',
     office: props.appointment?.office ?? '',
     consulting_room_id: props.appointment?.consulting_room_id ?? '',
-    reason: props.appointment?.reason ?? '',
+    reason: props.appointment?.reason ?? props.initialValues?.reason ?? '',
     is_overbook: props.appointment?.is_overbook ?? false,
     requested_duration_minutes: '',
     procedure_resources: [],
     procedure_preparation: '',
+    recurrence_frequency: 'weekly',
+    recurrence_ends_on: '',
+    recurrence_occurrences: 4,
     ...(props.appointment
         ? { lock_version: props.appointment.lock_version }
         : {}),
@@ -87,6 +95,7 @@ const selectedLocation = computed(() =>
     ),
 );
 const isVirtual = computed(() => form.type === 'virtual');
+const isRecurring = ref(false);
 
 const availableRooms = computed(() =>
     props.roomOptions.filter(
@@ -356,7 +365,7 @@ const submit = (): void => {
         return;
     }
 
-    form.post(props.submitUrl, {
+    form.post(isRecurring.value && props.recurringSubmitUrl ? props.recurringSubmitUrl : props.submitUrl, {
         preserveScroll: true,
     });
 };
@@ -602,6 +611,27 @@ const submit = (): void => {
                             <input id="procedure-preparation" v-model="form.procedure_preparation" maxlength="500" required class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
                         </div>
                     </template>
+                </div>
+            </section>
+
+            <section v-if="!isEditing" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+                <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-clinic-100 bg-clinic-50/60 p-4 text-sm text-slate-800 dark:border-clinic-900/60 dark:bg-clinic-950/25 dark:text-slate-100">
+                    <input v-model="isRecurring" type="checkbox" class="mt-0.5 size-4 rounded border-clinic-400 text-clinic-600 focus:ring-clinic-600" />
+                    <span><span class="block font-semibold">Crear una serie recurrente</span><span class="mt-1 block text-xs leading-5 text-slate-600 dark:text-slate-300">Cada fecha se valida contra la agenda antes de guardar la serie completa.</span></span>
+                </label>
+                <div v-if="isRecurring" class="mt-5 grid gap-5 sm:grid-cols-3">
+                    <div>
+                        <label for="recurrence-frequency" class="text-sm font-medium text-slate-800 dark:text-slate-200">Frecuencia</label>
+                        <select id="recurrence-frequency" v-model="form.recurrence_frequency" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white"><option value="weekly">Semanal</option><option value="biweekly">Cada dos semanas</option><option value="monthly">Mensual</option></select>
+                    </div>
+                    <div>
+                        <label for="recurrence-occurrences" class="text-sm font-medium text-slate-800 dark:text-slate-200">Cantidad de turnos</label>
+                        <input id="recurrence-occurrences" v-model="form.recurrence_occurrences" type="number" min="2" max="52" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                    </div>
+                    <div>
+                        <label for="recurrence-end" class="text-sm font-medium text-slate-800 dark:text-slate-200">O hasta esta fecha</label>
+                        <input id="recurrence-end" v-model="form.recurrence_ends_on" type="date" :min="appointmentDate" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                    </div>
                 </div>
             </section>
         </div>

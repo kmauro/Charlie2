@@ -60,6 +60,7 @@ class StoreAppointmentRequest extends FormRequest
             'cancellation_reason' => ['prohibited'],
             'cancelled_at' => ['prohibited'],
             'cancelled_by' => ['prohibited'],
+            'appointment_series_id' => ['prohibited'],
         ];
     }
 

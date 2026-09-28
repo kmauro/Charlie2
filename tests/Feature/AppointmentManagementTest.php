@@ -3,6 +3,7 @@
 use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Enums\AppointmentType;
 use App\Domains\Appointments\Models\Appointment;
+use App\Domains\Appointments\Models\AppointmentWaitlistEntry;
 use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Models\Location;
@@ -556,9 +557,40 @@ it('does not expose a permanent deletion endpoint', function () {
         'appointments.create',
         'appointments.edit',
         'appointments.index',
+        'appointments.recurring.store',
         'appointments.status',
         'appointments.store',
         'appointments.update',
+        'appointments.waitlist.index',
+        'appointments.waitlist.schedule.create',
+        'appointments.waitlist.schedule.store',
+        'appointments.waitlist.store',
     ])->and(fn () => $appointment->delete())
         ->toThrow(LogicException::class);
+});
+
+it('preloads a waitlist assignment with the preferred professional next available slot', function () {
+    $context = appointmentSchedulingContext();
+    $actor = appointmentsActor(RoleCode::SuperAdmin);
+    $entry = AppointmentWaitlistEntry::query()->create([
+        'patient_id' => $context['patient']->getKey(),
+        'professional_id' => $context['professional']->getKey(),
+        'location_id' => $context['location']->getKey(),
+        'type' => AppointmentType::InPerson->value,
+        'desired_from' => $context['starts_at']->toDateString(),
+        'priority' => 1,
+        'status' => 'waiting',
+        'notes' => 'Prefiere el primer horario disponible.',
+    ]);
+
+    $this->actingAs($actor)
+        ->get(route('appointments.waitlist.schedule.create', $entry))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('initialValues.patient_id', $context['patient']->getKey())
+            ->where('initialValues.professional_id', $context['professional']->getKey())
+            ->where('initialValues.location_id', $context['location']->getKey())
+            ->where('initialValues.type', AppointmentType::InPerson->value)
+            ->where('initialValues.starts_at', $context['starts_at']->startOfDay()->addHours(8)->format('Y-m-d\\TH:i'))
+            ->where('initialValues.reason', 'Prefiere el primer horario disponible.'));
 });

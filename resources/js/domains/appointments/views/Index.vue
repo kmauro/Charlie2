@@ -258,6 +258,15 @@ const submitCancellation = (): void => {
         :action-label="permissions.create ? 'Nuevo turno' : ''"
         action-icon="calendar"
     >
+        <div v-if="permissions.create" class="mb-5 flex justify-end">
+            <Link
+                href="/lista-espera"
+                class="inline-flex min-h-10 items-center gap-2 rounded-xl border border-clinic-200 px-3.5 text-sm font-semibold text-clinic-700 hover:bg-clinic-50 dark:border-clinic-800 dark:text-clinic-300 dark:hover:bg-clinic-950/30"
+            >
+                <BaseIcon name="clock" class="size-4" />
+                Lista de espera
+            </Link>
+        </div>
         <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumen de turnos">
             <article
                 v-for="card in summaryCards"
@@ -435,6 +444,7 @@ const submitCancellation = (): void => {
                             <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset" :class="statusClasses(appointment.status.value)">
                                 {{ appointment.status.label }}
                             </span>
+                            <span v-if="appointment.is_overbook" class="inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300">Sobreturno</span>
                         </div>
 
                         <div class="mt-4 grid gap-3 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-950/60">
@@ -528,6 +538,7 @@ const submitCancellation = (): void => {
                                     <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset" :class="statusClasses(appointment.status.value)">
                                         {{ appointment.status.label }}
                                     </span>
+                                    <span v-if="appointment.is_overbook" class="mt-2 inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-950/40 dark:text-amber-300">Sobreturno</span>
                                     <select
                                         v-if="appointment.permissions.change_status && appointment.available_statuses.length"
                                         :value="appointment.status.value"

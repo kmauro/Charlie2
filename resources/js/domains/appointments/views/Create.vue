@@ -3,6 +3,7 @@ import AppointmentForm from '@/domains/appointments/components/AppointmentForm.v
 import type {
     AppointmentAgendaConstraints,
     AppointmentLocationOption,
+    AppointmentInitialValues,
     AppointmentOption,
     AppointmentPatientOption,
     AppointmentProfessionalOption,
@@ -22,7 +23,9 @@ defineProps<{
     urls: {
         index: string;
         store: string;
+        recurringStore?: string;
     };
+    initialValues?: AppointmentInitialValues;
 }>();
 </script>
 
@@ -44,6 +47,8 @@ defineProps<{
             :status-options="statusOptions"
             :index-url="urls.index"
             :submit-url="urls.store"
+            :recurring-submit-url="urls.recurringStore"
+            :initial-values="initialValues"
         />
     </AppShell>
 </template>
