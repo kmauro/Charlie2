@@ -93,6 +93,10 @@ it('renders only agenda data inside the actor location scope', function () {
     $actor->locations()->attach($visible);
     ConsultingRoom::factory()->for($visible)->create(['name' => 'Consultorio visible']);
     ConsultingRoom::factory()->for($hidden)->create(['name' => 'Consultorio oculto']);
+    $visibleProfessional = Professional::factory()->create();
+    $hiddenProfessional = Professional::factory()->create();
+    ProfessionalSchedule::factory()->for($visibleProfessional)->forLocation($visible)->create();
+    ProfessionalSchedule::factory()->for($hiddenProfessional)->forLocation($hidden)->create();
 
     $this->actingAs($actor)
         ->get(route('operational_agenda.index'))
@@ -100,6 +104,12 @@ it('renders only agenda data inside the actor location scope', function () {
         ->assertInertia(fn (Assert $page) => $page
             ->component('professionals/views/OperationalAgenda')
             ->has('locations', 1)
+            ->has('professionals', 1, fn (Assert $professional) => $professional
+                ->where('value', $visibleProfessional->getKey())
+                ->etc())
+            ->has('schedules', 1, fn (Assert $schedule) => $schedule
+                ->where('professional_id', $visibleProfessional->getKey())
+                ->etc())
             ->has('rooms', 1, fn (Assert $room) => $room
                 ->where('name', 'Consultorio visible')
                 ->etc())

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import BaseIcon from '@/shared/components/BaseIcon.vue';
 import FieldError from '@/shared/components/FieldError.vue';
+import SearchableCombobox from '@/shared/components/SearchableCombobox.vue';
 import AppShell from '@/shared/layouts/AppShell.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 
 interface Option { value: number; label: string; code?: string; specialty?: string }
 interface Room { id: number; location_id: number; location_name: string; name: string; code: string; sector: string | null; floor: string | null; equipment: string[]; operational_restrictions: string | null; is_active: boolean }
@@ -11,7 +12,7 @@ interface Holiday { id: number; location_id: number; location_name: string; date
 interface Leave { id: number; professional_name: string; location_name: string; starts_on: string; ends_on: string; reason: string }
 interface Exception { id: number; professional_name: string; location_name: string; date: string; type: string; type_label: string; start_time: string | null; end_time: string | null; reason: string | null }
 interface ScheduleBreak { id: number; start_time: string; end_time: string; label: string | null }
-interface Schedule { id: number; professional_name: string; location_id: number; location_name: string; weekday_label: string; start_time: string; end_time: string; consulting_room_id: number | null; consulting_room_name: string | null; breaks: ScheduleBreak[] }
+interface Schedule { id: number; professional_id: number; professional_name: string; location_id: number; location_name: string; weekday_label: string; start_time: string; end_time: string; consulting_room_id: number | null; consulting_room_name: string | null; breaks: ScheduleBreak[] }
 
 const props = defineProps<{
     locations: Option[];
@@ -26,6 +27,7 @@ const props = defineProps<{
 
 const defaultLocation = props.locations[0]?.value ?? '';
 const defaultProfessional = props.professionals[0]?.value ?? '';
+const selectedScheduleProfessionalId = ref<number | ''>(defaultProfessional);
 
 const roomForm = useForm({ location_id: defaultLocation, name: '', code: '', sector: '', floor: '', equipment_text: '', operational_restrictions: '' });
 const holidayForm = useForm({ location_id: defaultLocation, date: '', name: '' });
@@ -34,6 +36,21 @@ const exceptionForm = useForm({ professional_id: defaultProfessional, location_i
 const breakForms = reactive<Record<number, { start_time: string; end_time: string; label: string }>>({});
 
 const activeRooms = computed(() => props.rooms.filter((room) => room.is_active));
+const scheduleProfessionalOptions = computed(() => props.professionals.map((professional) => ({
+    value: professional.value,
+    label: professional.label,
+    description: professional.specialty,
+    searchText: `${professional.label} ${professional.specialty ?? ''}`,
+})));
+const filteredSchedules = computed(() => {
+    if (selectedScheduleProfessionalId.value === '') {
+        return [];
+    }
+
+    return props.schedules.filter(
+        (schedule) => schedule.professional_id === selectedScheduleProfessionalId.value,
+    );
+});
 const roomsForLocation = (locationId: number): Room[] => activeRooms.value.filter((room) => room.location_id === locationId);
 const fieldClass = 'mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-950 focus:border-clinic-600 focus:ring-2 focus:ring-clinic-600/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white';
 const cardClass = 'rounded-2xl border border-slate-200 bg-white shadow-card dark:border-slate-800 dark:bg-slate-900';
@@ -145,15 +162,32 @@ const formatTime = (value: string | null): string => value?.slice(0, 5) ?? '';
             </div>
 
             <section :class="cardClass">
-                <div class="border-b border-slate-200 p-5 dark:border-slate-800 sm:p-6"><h2 class="font-semibold text-slate-950 dark:text-white">Franjas semanales, descansos y consultorio fijo</h2><p class="mt-1 text-sm text-slate-500 dark:text-slate-400">La asignación fija tiene prioridad; sin ella, el turno usa asignación automática.</p></div>
+                <div class="border-b border-slate-200 p-5 dark:border-slate-800 sm:flex sm:items-end sm:justify-between sm:gap-6 sm:p-6">
+                    <div>
+                        <h2 class="font-semibold text-slate-950 dark:text-white">Franjas semanales, descansos y consultorio fijo</h2>
+                        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">La asignación fija tiene prioridad; sin ella, el turno usa asignación automática.</p>
+                    </div>
+                    <div v-if="professionals.length" class="mt-4 w-full sm:mt-0 sm:max-w-sm">
+                        <label for="schedule-professional-filter" class="text-sm font-medium text-slate-800 dark:text-slate-200">Profesional</label>
+                        <SearchableCombobox
+                            v-model="selectedScheduleProfessionalId"
+                            input-id="schedule-professional-filter"
+                            :options="scheduleProfessionalOptions"
+                            placeholder="Seleccionar profesional"
+                            search-placeholder="Buscar por apellido o especialidad..."
+                            empty-message="No se encontraron profesionales."
+                        />
+                    </div>
+                </div>
                 <div class="grid gap-4 p-5 lg:grid-cols-2 sm:p-6">
-                    <article v-for="schedule in schedules" :key="schedule.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                    <article v-for="schedule in filteredSchedules" :key="schedule.id" class="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
                         <div><p class="font-semibold text-slate-900 dark:text-white">{{ schedule.professional_name }}</p><p class="text-xs text-slate-500">{{ schedule.weekday_label }} · {{ formatTime(schedule.start_time) }}–{{ formatTime(schedule.end_time) }} · {{ schedule.location_name }}</p></div>
                         <label class="mt-4 block text-xs font-medium text-slate-600 dark:text-slate-300">Consultorio fijo<select :value="schedule.consulting_room_id ?? ''" :class="fieldClass" :disabled="!permissions.manage" @change="assignRoom(schedule, $event)"><option value="">Asignación automática</option><option v-for="room in roomsForLocation(schedule.location_id)" :key="room.id" :value="room.id">{{ room.name }} · {{ room.code }}</option></select></label>
                         <div class="mt-4 space-y-2"><div v-for="item in schedule.breaks" :key="item.id" class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-950 dark:text-slate-300"><span>{{ formatTime(item.start_time) }}–{{ formatTime(item.end_time) }} · {{ item.label || 'Descanso' }}</span><button v-if="permissions.manage" class="text-slate-400 hover:text-rose-600" @click="remove(`/agenda-operativa/descansos/${item.id}`, 'el descanso')"><BaseIcon name="close" class="size-4" /></button></div></div>
                         <div v-if="permissions.manage" class="mt-4 grid grid-cols-2 gap-2"><input v-model="breakForm(schedule.id).start_time" type="time" :class="fieldClass" aria-label="Inicio del descanso" /><input v-model="breakForm(schedule.id).end_time" type="time" :class="fieldClass" aria-label="Fin del descanso" /><input v-model="breakForm(schedule.id).label" :class="fieldClass" class="col-span-2" placeholder="Etiqueta opcional" /><button class="col-span-2 min-h-10 rounded-xl border border-clinic-200 text-xs font-semibold text-clinic-700 hover:bg-clinic-50 dark:border-clinic-800 dark:text-clinic-300" @click="storeBreak(schedule.id)">Agregar descanso</button></div>
                     </article>
-                    <p v-if="schedules.length === 0" class="text-sm text-slate-500">No hay franjas semanales dentro de tu alcance.</p>
+                    <p v-if="professionals.length === 0" class="text-sm text-slate-500">No hay franjas semanales dentro de tu alcance.</p>
+                    <p v-else-if="filteredSchedules.length === 0" class="text-sm text-slate-500">El profesional seleccionado no tiene franjas semanales dentro de tu alcance.</p>
                 </div>
             </section>
         </div>

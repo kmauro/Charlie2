@@ -133,6 +133,7 @@ class OperationalAgendaService
                 ->get()
                 ->map(fn (ProfessionalSchedule $schedule): array => [
                     'id' => (int) $schedule->getKey(),
+                    'professional_id' => $schedule->professional_id,
                     'professional_name' => $schedule->professional->user->name,
                     'location_id' => $schedule->location_id,
                     'location_name' => $schedule->location?->name ?? $schedule->location_name,
