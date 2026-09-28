@@ -7,6 +7,7 @@ use App\Domains\Patients\Providers\PatientsServiceProvider;
 use App\Domains\Professionals\Providers\ProfessionalsServiceProvider;
 use App\Domains\Users\Providers\UsersServiceProvider;
 use App\Providers\AppServiceProvider;
+use App\Providers\BillingServiceProvider;
 
 return [
     AppointmentsServiceProvider::class,
@@ -16,4 +17,5 @@ return [
     ProfessionalsServiceProvider::class,
     UsersServiceProvider::class,
     AppServiceProvider::class,
+    BillingServiceProvider::class,
 ];

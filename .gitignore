@@ -26,3 +26,5 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 pendientes.md
+database/seeders/DemoClinicSeeder.php
+Informe_estructura_base_de_datos_Charlie2.docx

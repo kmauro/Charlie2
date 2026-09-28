@@ -20,7 +20,10 @@ class LegalEntity extends Model
     protected $fillable = [
         'business_name',
         'cuit',
+        'tax_condition',
         'fiscal_address',
+        'fiscal_point_of_sale',
+        'arca_environment',
         'status',
         'archived_at',
     ];
@@ -58,6 +61,7 @@ class LegalEntity extends Model
     protected function casts(): array
     {
         return [
+            'fiscal_point_of_sale' => 'integer',
             'status' => OrganizationStatus::class,
             'archived_at' => 'datetime',
         ];

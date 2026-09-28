@@ -107,6 +107,19 @@ const navigationItems = [
         ],
     },
     {
+        label: 'Facturación',
+        href: '/facturacion',
+        icon: 'wallet',
+        allowedRoles: [
+            'superadmin',
+            'administrator',
+            'manager',
+            'accounting',
+            'reception',
+            'sales',
+        ],
+    },
+    {
         label: 'Agenda operativa',
         href: '/agenda-operativa',
         icon: 'clock',

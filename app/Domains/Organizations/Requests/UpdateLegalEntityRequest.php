@@ -31,7 +31,12 @@ class UpdateLegalEntityRequest extends FormRequest
                 'regex:/^\d{11}$/',
                 Rule::unique(LegalEntity::class, 'cuit')->ignore($legalEntity),
             ],
+            'tax_condition' => ['required', Rule::in(['responsable_inscripto', 'monotributo', 'exento', 'consumidor_final'])],
             'fiscal_address' => ['required', 'string', 'max:1000'],
+            'fiscal_point_of_sale' => ['nullable', 'integer', 'between:1,99999'],
+            'arca_environment' => ['nullable', Rule::in(['homologacion', 'produccion'])],
+            'arca_certificate' => ['nullable', 'string', 'max:30000'],
+            'arca_private_key' => ['nullable', 'string', 'max:30000'],
             'status' => [
                 'required',
                 Rule::in(array_column(
@@ -48,6 +53,9 @@ class UpdateLegalEntityRequest extends FormRequest
             'business_name' => Str::squish((string) $this->input('business_name')),
             'cuit' => (string) preg_replace('/\D+/', '', (string) $this->input('cuit')),
             'fiscal_address' => Str::squish((string) $this->input('fiscal_address')),
+            'tax_condition' => $this->input('tax_condition', 'responsable_inscripto'),
+            'fiscal_point_of_sale' => $this->input('fiscal_point_of_sale'),
+            'arca_environment' => $this->input('arca_environment'),
         ]);
     }
 

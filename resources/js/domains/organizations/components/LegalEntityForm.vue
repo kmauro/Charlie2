@@ -18,7 +18,12 @@ const isEditing = computed(() => Boolean(props.legalEntity));
 const form = useForm<LegalEntityFormData>({
     business_name: props.legalEntity?.business_name ?? '',
     cuit: props.legalEntity?.cuit ?? '',
+    tax_condition: props.legalEntity?.tax_condition ?? 'responsable_inscripto',
     fiscal_address: props.legalEntity?.fiscal_address ?? '',
+    fiscal_point_of_sale: props.legalEntity?.fiscal_point_of_sale ?? '',
+    arca_environment: props.legalEntity?.arca_environment ?? '',
+    arca_certificate: '',
+    arca_private_key: '',
     status: props.legalEntity?.status.value ?? 'active',
 });
 
@@ -82,6 +87,34 @@ const submit = (): void => {
                     <FieldError :message="form.errors.cuit" />
                 </div>
 
+                <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950/40">
+                    <p class="text-sm font-medium text-slate-800 dark:text-slate-100">Credenciales ARCA</p>
+                    <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Opcionales hasta integrar emisión electrónica. Se cifran al guardarse y no vuelven a mostrarse.</p>
+                    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                        <label for="legal-arca-certificate" class="text-sm font-medium text-slate-700 dark:text-slate-300">Certificado
+                            <textarea id="legal-arca-certificate" v-model="form.arca_certificate" rows="3" autocomplete="off" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                            <FieldError :message="form.errors.arca_certificate" />
+                        </label>
+                        <label for="legal-arca-private-key" class="text-sm font-medium text-slate-700 dark:text-slate-300">Clave privada
+                            <textarea id="legal-arca-private-key" v-model="form.arca_private_key" rows="3" autocomplete="new-password" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                            <FieldError :message="form.errors.arca_private_key" />
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="legal-tax-condition" class="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Condición fiscal <span class="text-rose-600">*</span>
+                    </label>
+                    <select id="legal-tax-condition" v-model="form.tax_condition" required class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+                        <option value="responsable_inscripto">Responsable inscripto</option>
+                        <option value="monotributo">Monotributo</option>
+                        <option value="exento">Exento</option>
+                        <option value="consumidor_final">Consumidor final</option>
+                    </select>
+                    <FieldError :message="form.errors.tax_condition" />
+                </div>
+
                 <div>
                     <label for="legal-status" class="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Estado <span class="text-rose-600">*</span>
@@ -113,6 +146,23 @@ const submit = (): void => {
                         class="mt-2 w-full resize-y rounded-xl border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
                     />
                     <FieldError :message="form.errors.fiscal_address" />
+                </div>
+
+                <div>
+                    <label for="legal-point-of-sale" class="text-sm font-medium text-slate-700 dark:text-slate-300">Punto de venta ARCA</label>
+                    <input id="legal-point-of-sale" v-model="form.fiscal_point_of_sale" inputmode="numeric" min="1" max="99999" type="number" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-sm text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                    <FieldError :message="form.errors.fiscal_point_of_sale" />
+                </div>
+
+                <div>
+                    <label for="legal-arca-environment" class="text-sm font-medium text-slate-700 dark:text-slate-300">Ambiente ARCA</label>
+                    <select id="legal-arca-environment" v-model="form.arca_environment" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none focus:border-clinic-600 focus:ring-4 focus:ring-clinic-600/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white">
+                        <option value="">Sin configurar</option>
+                        <option value="homologacion">Homologación</option>
+                        <option value="produccion">Producción</option>
+                    </select>
+                    <p class="pt-1.5 text-xs text-slate-500 dark:text-slate-400">Opcional hasta activar la emisión electrónica.</p>
+                    <FieldError :message="form.errors.arca_environment" />
                 </div>
             </div>
         </section>

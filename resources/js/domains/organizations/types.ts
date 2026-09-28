@@ -54,7 +54,10 @@ export interface LegalEntity {
     business_name: string;
     cuit: string;
     formatted_cuit: string;
+    tax_condition: string;
     fiscal_address: string;
+    fiscal_point_of_sale: number | null;
+    arca_environment: string | null;
     status: OrganizationOption;
     archived_at: string | null;
     updated_at: string;
@@ -84,7 +87,12 @@ export interface LocationFormData {
 export interface LegalEntityFormData {
     business_name: string;
     cuit: string;
+    tax_condition: string;
     fiscal_address: string;
+    fiscal_point_of_sale: number | '';
+    arca_environment: string;
+    arca_certificate: string;
+    arca_private_key: string;
     status: string;
 }
 

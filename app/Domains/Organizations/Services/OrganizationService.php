@@ -4,6 +4,7 @@ namespace App\Domains\Organizations\Services;
 
 use App\Domains\Audits\Data\AuditContext;
 use App\Domains\Audits\Services\AuditService;
+use App\Domains\Billing\Services\BillingSetupService;
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
@@ -23,6 +24,7 @@ class OrganizationService
         private OrganizationRepository $organizations,
         private AuditService $audit,
         private UserScopeService $scope,
+        private BillingSetupService $billingSetup,
     ) {}
 
     /**
@@ -113,6 +115,10 @@ class OrganizationService
             $legalEntity = $this->organizations->createLegalEntity(
                 $this->legalEntityAttributes($data),
             );
+            $this->billingSetup->initializeFor($legalEntity, [
+                'arca_certificate' => $data['arca_certificate'] ?? null,
+                'arca_private_key' => $data['arca_private_key'] ?? null,
+            ]);
             $this->audit->record(
                 event: 'legal_entity.created',
                 auditable: $legalEntity,
@@ -150,6 +156,10 @@ class OrganizationService
                 $lockedLegalEntity,
                 $attributes,
             );
+            $this->billingSetup->initializeFor($updatedLegalEntity, [
+                'arca_certificate' => $data['arca_certificate'] ?? null,
+                'arca_private_key' => $data['arca_private_key'] ?? null,
+            ]);
             $afterValues = $this->legalEntitySnapshot($updatedLegalEntity);
 
             if ($statusChanged) {
@@ -387,7 +397,10 @@ class OrganizationService
         return [
             'business_name' => Str::squish($data['business_name']),
             'cuit' => (string) preg_replace('/\D+/', '', $data['cuit']),
+            'tax_condition' => $data['tax_condition'],
             'fiscal_address' => Str::squish($data['fiscal_address']),
+            'fiscal_point_of_sale' => $data['fiscal_point_of_sale'] ?? null,
+            'arca_environment' => $data['arca_environment'] ?? null,
             'status' => $status,
             'archived_at' => null,
         ];
@@ -449,7 +462,10 @@ class OrganizationService
         return [
             'business_name' => $legalEntity->business_name,
             'cuit' => $legalEntity->cuit,
+            'tax_condition' => $legalEntity->tax_condition,
             'fiscal_address' => $legalEntity->fiscal_address,
+            'fiscal_point_of_sale' => $legalEntity->fiscal_point_of_sale,
+            'arca_environment' => $legalEntity->arca_environment,
             'status' => $legalEntity->status->value,
             'archived_at' => $legalEntity->archived_at?->toISOString(),
         ];

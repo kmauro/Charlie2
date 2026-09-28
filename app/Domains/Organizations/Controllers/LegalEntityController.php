@@ -162,7 +162,10 @@ class LegalEntityController extends Controller
             'business_name' => $legalEntity->business_name,
             'cuit' => $legalEntity->cuit,
             'formatted_cuit' => $this->formatCuit($legalEntity->cuit),
+            'tax_condition' => $legalEntity->tax_condition,
             'fiscal_address' => $legalEntity->fiscal_address,
+            'fiscal_point_of_sale' => $legalEntity->fiscal_point_of_sale,
+            'arca_environment' => $legalEntity->arca_environment,
             'status' => [
                 'value' => $legalEntity->status->value,
                 'label' => $legalEntity->status->label(),

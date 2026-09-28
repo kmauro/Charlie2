@@ -16,6 +16,7 @@ use App\Domains\Patients\Controllers\PatientController;
 use App\Domains\Professionals\Controllers\OperationalAgendaController;
 use App\Domains\Professionals\Controllers\ProfessionalController;
 use App\Domains\Users\Controllers\UserController;
+use App\Http\Controllers\Domains\Billing\Controllers\BillingController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -46,6 +47,18 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+
+    Route::controller(BillingController::class)->prefix('facturacion')->name('billing.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/facturas', 'storeInvoice')->name('invoices.store');
+        Route::post('/facturas/{invoice}/notas-de-credito', 'storeCreditNote')->name('credit-notes.store');
+        Route::post('/cobros', 'storePayment')->name('payments.store');
+        Route::post('/facturas/{invoice}/devoluciones', 'storeRefund')->name('refunds.store');
+        Route::post('/cajas/{location}/apertura', 'openCashRegister')->name('cash-registers.open');
+        Route::post('/cajas/{location}/cierre', 'closeCashRegister')->name('cash-registers.close');
+        Route::post('/devoluciones/{refund}/autorizar', 'authorizeRefund')->name('refunds.authorize');
+        Route::post('/devoluciones/{refund}/registrar', 'registerRefund')->name('refunds.register');
+    });
 
     Route::controller(AuditLogController::class)->prefix('auditoria')->name('audits.')->group(function (): void {
         Route::get('/', 'index')->name('index');

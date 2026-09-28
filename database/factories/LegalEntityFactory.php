@@ -17,7 +17,10 @@ class LegalEntityFactory extends Factory
         return [
             'business_name' => fake()->company(),
             'cuit' => $this->validCuit(),
+            'tax_condition' => 'responsable_inscripto',
             'fiscal_address' => fake()->address(),
+            'fiscal_point_of_sale' => null,
+            'arca_environment' => null,
             'status' => OrganizationStatus::Active,
             'archived_at' => null,
         ];
