@@ -9,6 +9,7 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
+use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserStatus;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserScopeService;
@@ -28,10 +29,14 @@ class DashboardController extends Controller
         $actor = $request->user();
         abort_unless($actor instanceof User, 401);
         $locationIds = $this->scope->locationIdsFor($actor);
+        $professionalId = $this->professionalIdFor($actor);
 
         return Inertia::render('dashboard/views/Dashboard', [
             'metrics' => $this->metrics($locationIds),
-            'upcomingAppointments' => $this->upcomingAppointments($locationIds),
+            'upcomingAppointments' => $this->upcomingAppointments(
+                $locationIds,
+                $professionalId,
+            ),
             'appointmentContext' => $this->appointmentContext($locationIds),
             'operationalStatuses' => $this->operationalStatuses($locationIds),
         ]);
@@ -118,8 +123,10 @@ class DashboardController extends Controller
     /**
      * @return array<int, array{time: string, patient: string, professional: string, specialty: string, status: string, tone: string}>
      */
-    private function upcomingAppointments(?array $locationIds): array
-    {
+    private function upcomingAppointments(
+        ?array $locationIds,
+        ?int $professionalId,
+    ): array {
         return Appointment::query()
             ->with(['patient:id,first_name,last_name', 'professional.user:id,name'])
             ->whereBetween('starts_at', [now(), now()->endOfDay()])
@@ -127,6 +134,10 @@ class DashboardController extends Controller
             ->when(
                 $locationIds !== null,
                 fn (Builder $query) => $query->whereIn('location_id', $locationIds),
+            )
+            ->when(
+                $professionalId !== null,
+                fn (Builder $query) => $query->where('professional_id', $professionalId),
             )
             ->orderBy('starts_at')
             ->limit(3)
@@ -140,6 +151,17 @@ class DashboardController extends Controller
                 'tone' => $this->appointmentTone($appointment->status),
             ])
             ->all();
+    }
+
+    private function professionalIdFor(User $actor): ?int
+    {
+        if (! $actor->hasRole(RoleCode::Professional)) {
+            return null;
+        }
+
+        return (int) (Professional::query()
+            ->where('user_id', $actor->getKey())
+            ->value('id') ?? 0);
     }
 
     /**

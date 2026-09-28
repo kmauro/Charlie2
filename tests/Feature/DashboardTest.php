@@ -66,3 +66,55 @@ it('provides operational dashboard metrics through inertia props', function () {
                 ->where('icon', 'shield-check')
                 ->where('tone', 'emerald')));
 });
+
+it('shows professionals only their own upcoming appointments', function () {
+    $this->travelTo(now()->startOfDay()->addHours(9));
+    $professional = Professional::factory()->create();
+    $otherProfessional = Professional::factory()->create();
+    $location = Location::factory()->create();
+    $startsAt = now()->addHour();
+    $ownPatient = Patient::factory()->create([
+        'first_name' => 'Paciente',
+        'last_name' => 'Propio',
+    ]);
+    $otherPatient = Patient::factory()->create([
+        'first_name' => 'Paciente',
+        'last_name' => 'Ajeno',
+    ]);
+
+    $professional->schedules()->create([
+        'location_id' => $location->getKey(),
+        'location_name' => $location->name,
+        'weekday' => $startsAt->dayOfWeekIso,
+        'start_time' => '08:00',
+        'end_time' => '18:00',
+    ]);
+
+    Appointment::factory()
+        ->for($ownPatient)
+        ->for($professional)
+        ->for($location)
+        ->create([
+            'starts_at' => $startsAt,
+            'ends_at' => $startsAt->clone()->addMinutes(30),
+            'status' => AppointmentStatus::Confirmed,
+        ]);
+    Appointment::factory()
+        ->for($otherPatient)
+        ->for($otherProfessional)
+        ->for($location)
+        ->create([
+            'starts_at' => $startsAt->clone()->addMinutes(30),
+            'ends_at' => $startsAt->clone()->addHour(),
+            'status' => AppointmentStatus::Confirmed,
+        ]);
+
+    $this->actingAs($professional->user)
+        ->get(route('dashboard'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('upcomingAppointments', 1, fn (Assert $appointment) => $appointment
+                ->where('patient', 'Paciente Propio')
+                ->where('professional', $professional->user->name)
+                ->etc()));
+});
