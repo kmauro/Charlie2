@@ -245,20 +245,18 @@ it('keeps normalized-name fallback for legacy professional schedules', function 
     expect(Appointment::query()->count())->toBe(1);
 });
 
-it('rejects overbook and server-calculated fields from clients', function () {
+it('allows an overbook while protecting server-calculated fields', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext();
     grantAppointmentLocation($actor, $context['location']);
 
     $this->actingAs($actor)
         ->post(route('appointments.store'), validAppointmentPayload($context, [
-            'is_overbook' => true,
             'duration_minutes' => 5,
             'ends_at' => $context['starts_at']->clone()->addMinutes(5),
             'status' => AppointmentStatus::Confirmed->value,
         ]))
         ->assertSessionHasErrors([
-            'is_overbook',
             'duration_minutes',
             'ends_at',
             'status',
@@ -266,8 +264,19 @@ it('rejects overbook and server-calculated fields from clients', function () {
 
     expect(Appointment::query()->count())->toBe(0);
 
-    expect(fn () => Appointment::factory()->create(['is_overbook' => true]))
-        ->toThrow(LogicException::class, 'Los sobreturnos todavía no están habilitados.');
+    Appointment::factory()->create([
+        'professional_id' => $context['professional'],
+        'location_id' => $context['location'],
+        'starts_at' => $context['starts_at'],
+        'ends_at' => $context['starts_at']->clone()->addMinutes(30),
+    ]);
+
+    $this->post(route('appointments.store'), validAppointmentPayload($context, [
+        'patient_id' => Patient::factory()->create()->getKey(),
+        'is_overbook' => true,
+    ]))->assertRedirect(route('appointments.index'));
+
+    expect(Appointment::query()->latest('id')->value('is_overbook'))->toBeTrue();
 });
 
 it('requires eligible references and a matching professional schedule', function () {

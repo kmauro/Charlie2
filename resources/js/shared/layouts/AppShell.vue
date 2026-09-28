@@ -103,6 +103,7 @@ const navigationItems = [
             'professional',
             'nursing',
             'emergency',
+            'patient',
         ],
     },
     {

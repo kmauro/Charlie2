@@ -3,6 +3,7 @@
 namespace App\Domains\Appointments\Requests;
 
 use App\Domains\Appointments\Models\Appointment;
+use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,7 +23,11 @@ class CancelAppointmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'cancellation_reason' => ['required', 'string', 'max:500'],
+            'cancellation_reason' => [
+                $this->user()?->hasRole(RoleCode::Patient) ? 'nullable' : 'required',
+                'string',
+                'max:500',
+            ],
             'lock_version' => ['required', 'integer', 'min:1'],
         ];
     }

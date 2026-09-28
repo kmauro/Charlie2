@@ -22,9 +22,9 @@ class EloquentAppointmentRepository implements AppointmentRepository
      * @param  array<string, mixed>  $filters
      * @return LengthAwarePaginator<int, Appointment>
      */
-    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds): LengthAwarePaginator
+    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds, ?int $patientId = null): LengthAwarePaginator
     {
-        return $this->scopedQuery($professionalId, $locationIds)
+        return $this->scopedQuery($professionalId, $locationIds, $patientId)
             ->select([
                 'id',
                 'patient_id',
@@ -83,9 +83,9 @@ class EloquentAppointmentRepository implements AppointmentRepository
     }
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
-    public function summaries(?int $professionalId, ?array $locationIds): array
+    public function summaries(?int $professionalId, ?array $locationIds, ?int $patientId = null): array
     {
-        $summary = $this->scopedQuery($professionalId, $locationIds)
+        $summary = $this->scopedQuery($professionalId, $locationIds, $patientId)
             ->toBase()
             ->selectRaw('COUNT(*) as total')
             ->selectRaw(
@@ -117,7 +117,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
             'completed' => (int) ($summary->completed ?? 0),
             'cancelled' => (int) ($summary->cancelled ?? 0),
             'absent' => (int) ($summary->absent ?? 0),
-            'today' => $this->scopedQuery($professionalId, $locationIds)
+            'today' => $this->scopedQuery($professionalId, $locationIds, $patientId)
                 ->whereDate('starts_at', today())
                 ->count(),
         ];
@@ -295,7 +295,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
     }
 
     /** @param array<int, int>|null $locationIds */
-    private function scopedQuery(?int $professionalId, ?array $locationIds): Builder
+    private function scopedQuery(?int $professionalId, ?array $locationIds, ?int $patientId = null): Builder
     {
         return Appointment::query()
             ->when(
@@ -305,7 +305,8 @@ class EloquentAppointmentRepository implements AppointmentRepository
             ->when(
                 $locationIds !== null,
                 fn (Builder $query) => $query->whereIn('location_id', $locationIds),
-            );
+            )
+            ->when($patientId !== null, fn (Builder $query) => $query->where('patient_id', $patientId));
     }
 
     private function conflictQuery(

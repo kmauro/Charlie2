@@ -66,6 +66,10 @@ const form = useForm<AppointmentFormData>({
     office: props.appointment?.office ?? '',
     consulting_room_id: props.appointment?.consulting_room_id ?? '',
     reason: props.appointment?.reason ?? '',
+    is_overbook: props.appointment?.is_overbook ?? false,
+    requested_duration_minutes: '',
+    procedure_resources: [],
+    procedure_preparation: '',
     ...(props.appointment
         ? { lock_version: props.appointment.lock_version }
         : {}),
@@ -580,6 +584,24 @@ const submit = (): void => {
                         </p>
                         <FieldError id="appointment-reason-error" :message="form.errors.reason" class="mt-1.5" />
                     </div>
+                    <label class="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+                        <input v-model="form.is_overbook" type="checkbox" class="size-4 rounded border-amber-400 text-clinic-600 focus:ring-clinic-600" />
+                        Registrar como sobreturno (mantiene el control de conflicto del paciente y del consultorio).
+                    </label>
+                    <template v-if="form.type === 'procedure'">
+                        <div>
+                            <label for="procedure-duration" class="text-sm font-medium text-slate-800 dark:text-slate-200">Duración del procedimiento</label>
+                            <input id="procedure-duration" v-model="form.requested_duration_minutes" type="number" min="5" max="480" required class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                        </div>
+                        <div>
+                            <label for="procedure-resources" class="text-sm font-medium text-slate-800 dark:text-slate-200">Recursos requeridos</label>
+                            <input id="procedure-resources" :value="form.procedure_resources?.join(', ')" required placeholder="Ej.: monitor, bomba de infusión" class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" @input="form.procedure_resources = ($event.target as HTMLInputElement).value.split(',').map((value) => value.trim()).filter(Boolean)" />
+                        </div>
+                        <div>
+                            <label for="procedure-preparation" class="text-sm font-medium text-slate-800 dark:text-slate-200">Preparación administrativa</label>
+                            <input id="procedure-preparation" v-model="form.procedure_preparation" maxlength="500" required class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-950 dark:text-white" />
+                        </div>
+                    </template>
                 </div>
             </section>
         </div>

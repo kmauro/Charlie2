@@ -4,6 +4,7 @@ namespace App\Domains\Appointments\Services;
 
 use App\Domains\Appointments\Enums\AppointmentStatus;
 use App\Domains\Appointments\Enums\AppointmentType;
+use App\Domains\Appointments\Models\AgendaBlock;
 use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Appointments\Repositories\Contracts\AppointmentRepository;
 use App\Domains\Audits\Data\AuditContext;
@@ -49,6 +50,7 @@ class AppointmentService
         int $perPage,
         ?int $professionalId,
         ?array $locationIds,
+        ?int $patientId = null,
     ): LengthAwarePaginator {
         $normalizedFilters = Arr::only($filters, [
             'date',
@@ -77,13 +79,14 @@ class AppointmentService
             min(max($perPage, 1), 100),
             $professionalId,
             $locationIds,
+            $patientId,
         );
     }
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
-    public function summaries(?int $professionalId, ?array $locationIds): array
+    public function summaries(?int $professionalId, ?array $locationIds, ?int $patientId = null): array
     {
-        return $this->appointments->summaries($professionalId, $locationIds);
+        return $this->appointments->summaries($professionalId, $locationIds, $patientId);
     }
 
     public function find(int $id): Appointment
@@ -98,6 +101,11 @@ class AppointmentService
         }
 
         return $this->appointments->professionalIdForUser((int) $user->getKey()) ?? 0;
+    }
+
+    public function patientScopeFor(User $user): ?int
+    {
+        return $user->hasRole(RoleCode::Patient) ? $user->patient?->getKey() : null;
     }
 
     /** @return array<int, int>|null */
@@ -203,6 +211,9 @@ class AppointmentService
                 $location,
                 $startsAt,
                 $endsAt,
+                null,
+                (bool) ($data['is_overbook'] ?? false),
+                AppointmentType::from((string) $data['type']),
             );
             $room = $this->resolveConsultingRoom($data, $professional, $location, $startsAt, $endsAt);
 
@@ -270,6 +281,8 @@ class AppointmentService
                 $startsAt,
                 $endsAt,
                 (int) $lockedAppointment->getKey(),
+                (bool) ($data['is_overbook'] ?? false),
+                AppointmentType::from((string) $data['type']),
             );
             $room = $this->resolveConsultingRoom(
                 $data,
@@ -433,7 +446,9 @@ class AppointmentService
         Professional $professional,
         Location $location,
     ): array {
-        $durationMinutes = (int) $professional->appointment_duration_minutes;
+        $durationMinutes = AppointmentType::from((string) $data['type']) === AppointmentType::Procedure
+            ? (int) ($data['requested_duration_minutes'] ?? 0)
+            : (int) $professional->appointment_duration_minutes;
 
         if ($durationMinutes < 1 || $durationMinutes > 480) {
             throw ValidationException::withMessages([
@@ -463,6 +478,8 @@ class AppointmentService
         CarbonInterface $startsAt,
         CarbonInterface $endsAt,
         ?int $exceptAppointmentId = null,
+        bool $isOverbook = false,
+        AppointmentType $type = AppointmentType::InPerson,
     ): void {
         if (! in_array($patient->status, [
             PatientStatus::Active,
@@ -485,15 +502,14 @@ class AppointmentService
             ]);
         }
 
-        $this->ensureWithinLocationHours($location, $startsAt, $endsAt);
-        $this->ensureWithinProfessionalSchedule(
-            $professional,
-            $location,
-            $startsAt,
-            $endsAt,
-        );
+        if ($type !== AppointmentType::Emergency) {
+            $this->ensureWithinLocationHours($location, $startsAt, $endsAt);
+            $this->ensureWithinProfessionalSchedule($professional, $location, $startsAt, $endsAt);
+        }
 
-        if ($this->appointments->hasProfessionalConflict(
+        $this->ensureNotBlocked($professional, $location, $startsAt, $endsAt);
+
+        if (! $isOverbook && $this->appointments->hasProfessionalConflict(
             (int) $professional->getKey(),
             $startsAt,
             $endsAt,
@@ -530,6 +546,27 @@ class AppointmentService
         if ($startTime < $openingTime || $endTime > $closingTime) {
             throw ValidationException::withMessages([
                 'starts_at' => 'El turno debe quedar dentro del horario operativo de la sede.',
+            ]);
+        }
+    }
+
+    private function ensureNotBlocked(
+        Professional $professional,
+        Location $location,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+    ): void {
+        $blocks = AgendaBlock::query()
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->where(fn ($query) => $query
+                ->where('location_id', $location->getKey())
+                ->orWhere('professional_id', $professional->getKey()))
+            ->get();
+
+        if ($blocks->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El horario está bloqueado administrativamente en la agenda.',
             ]);
         }
     }
@@ -662,7 +699,10 @@ class AppointmentService
                     : ($this->nullableString($data['office'] ?? null)
                         ?? $this->nullableString($professional->fixed_office))),
             'reason' => $this->nullableString($data['reason'] ?? null),
-            'is_overbook' => false,
+            'is_overbook' => (bool) ($data['is_overbook'] ?? false),
+            'requested_duration_minutes' => $type === AppointmentType::Procedure ? $durationMinutes : null,
+            'procedure_resources' => $type === AppointmentType::Procedure ? ($data['procedure_resources'] ?? []) : null,
+            'procedure_preparation' => $type === AppointmentType::Procedure ? $this->nullableString($data['procedure_preparation'] ?? null) : null,
             'lock_version' => 1,
         ];
     }
@@ -676,13 +716,18 @@ class AppointmentService
         CarbonInterface $endsAt,
         ?int $exceptAppointmentId = null,
     ): ?ConsultingRoom {
-        if (AppointmentType::from((string) $data['type']) === AppointmentType::Virtual) {
+        if (in_array(AppointmentType::from((string) $data['type']), [AppointmentType::Virtual, AppointmentType::Emergency], true)) {
             return null;
         }
 
         $requestedRoomId = isset($data['consulting_room_id'])
             ? (int) $data['consulting_room_id']
             : null;
+        if (AppointmentType::from((string) $data['type']) === AppointmentType::Procedure && $requestedRoomId === null) {
+            throw ValidationException::withMessages([
+                'consulting_room_id' => 'Los procedimientos requieren un consultorio específico.',
+            ]);
+        }
         $fixedRoomId = $professional->schedules()
             ->where('location_id', $location->getKey())
             ->where('weekday', $startsAt->dayOfWeekIso)
@@ -747,6 +792,16 @@ class AppointmentService
                 'consulting_room_id' => $preferredRoomId === null
                     ? 'No hay consultorios disponibles durante ese horario.'
                     : 'El consultorio seleccionado ya está ocupado durante ese horario.',
+            ]);
+        }
+
+        if (AgendaBlock::query()
+            ->where('consulting_room_id', $availableRoom->getKey())
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'consulting_room_id' => 'El consultorio está bloqueado administrativamente en ese horario.',
             ]);
         }
 

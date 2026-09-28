@@ -17,11 +17,11 @@ interface AppointmentRepository
      * @return LengthAwarePaginator<int, Appointment>
      */
     /** @param array<int, int>|null $locationIds */
-    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds): LengthAwarePaginator;
+    public function paginate(array $filters, int $perPage, ?int $professionalId, ?array $locationIds, ?int $patientId = null): LengthAwarePaginator;
 
     /** @return array{total: int, scheduled: int, waiting: int, completed: int, cancelled: int, absent: int, today: int} */
     /** @param array<int, int>|null $locationIds */
-    public function summaries(?int $professionalId, ?array $locationIds): array;
+    public function summaries(?int $professionalId, ?array $locationIds, ?int $patientId = null): array;
 
     public function findOrFail(int $id): Appointment;
 

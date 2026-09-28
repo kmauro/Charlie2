@@ -50,10 +50,14 @@ class UpdateAppointmentRequest extends FormRequest
             ],
             'starts_at' => ['required', 'date', 'after:now'],
             'type' => ['required', Rule::enum(AppointmentType::class)],
+            'is_overbook' => ['sometimes', 'boolean'],
+            'requested_duration_minutes' => ['nullable', 'integer', 'between:5,480', 'required_if:type,procedure'],
+            'procedure_resources' => ['nullable', 'array', 'required_if:type,procedure'],
+            'procedure_resources.*' => ['string', 'max:120'],
+            'procedure_preparation' => ['nullable', 'string', 'max:500', 'required_if:type,procedure'],
             'office' => ['nullable', 'string', 'max:120'],
             'reason' => ['nullable', 'string', 'max:500'],
             'lock_version' => ['required', 'integer', 'min:1'],
-            'is_overbook' => ['prohibited'],
             'duration_minutes' => ['prohibited'],
             'ends_at' => ['prohibited'],
             'status' => ['prohibited'],
@@ -68,7 +72,6 @@ class UpdateAppointmentRequest extends FormRequest
     {
         return [
             'starts_at.after' => 'El turno debe programarse para una fecha y hora futuras.',
-            'is_overbook.prohibited' => 'Los sobreturnos todavía no están habilitados.',
             'duration_minutes.prohibited' => 'La duración se obtiene de la configuración del profesional.',
             'ends_at.prohibited' => 'La finalización se calcula automáticamente.',
         ];

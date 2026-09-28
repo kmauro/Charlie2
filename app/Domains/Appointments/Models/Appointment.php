@@ -24,6 +24,7 @@ class Appointment extends Model
     use HasFactory;
 
     protected $fillable = [
+        'appointment_series_id',
         'patient_id',
         'professional_id',
         'location_id',
@@ -31,10 +32,13 @@ class Appointment extends Model
         'starts_at',
         'ends_at',
         'duration_minutes',
+        'requested_duration_minutes',
         'type',
         'status',
         'office',
         'reason',
+        'procedure_resources',
+        'procedure_preparation',
         'is_overbook',
         'cancellation_reason',
         'cancelled_at',
@@ -83,6 +87,12 @@ class Appointment extends Model
         return $this->belongsTo(User::class, 'cancelled_by');
     }
 
+    /** @return BelongsTo<AppointmentSeries, $this> */
+    public function series(): BelongsTo
+    {
+        return $this->belongsTo(AppointmentSeries::class, 'appointment_series_id');
+    }
+
     protected static function newFactory(): AppointmentFactory
     {
         return AppointmentFactory::new();
@@ -90,14 +100,6 @@ class Appointment extends Model
 
     protected static function booted(): void
     {
-        static::saving(function (Appointment $appointment): void {
-            if ($appointment->is_overbook) {
-                throw new LogicException(
-                    'Los sobreturnos todavía no están habilitados.',
-                );
-            }
-        });
-
         static::deleting(function (): never {
             throw new LogicException(
                 'Los turnos no pueden eliminarse físicamente; deben cancelarse.',
@@ -112,9 +114,11 @@ class Appointment extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'duration_minutes' => 'integer',
+            'requested_duration_minutes' => 'integer',
             'type' => AppointmentType::class,
             'status' => AppointmentStatus::class,
             'is_overbook' => 'boolean',
+            'procedure_resources' => 'array',
             'cancelled_at' => 'datetime',
             'lock_version' => 'integer',
         ];

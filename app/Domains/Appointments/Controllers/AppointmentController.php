@@ -56,12 +56,14 @@ class AppointmentController extends Controller
         ]);
         $professionalScope = $this->service->professionalScopeFor($actor);
         $locationScope = $this->service->locationScopeFor($actor);
+        $patientScope = $this->service->patientScopeFor($actor);
         $appointments = $this->service
             ->paginate(
                 $filters,
                 (int) ($validated['per_page'] ?? 15),
                 $professionalScope,
                 $locationScope,
+                $patientScope,
             )
             ->appends($validated);
 
@@ -80,7 +82,7 @@ class AppointmentController extends Controller
                 ),
             ),
             'filters' => $filters,
-            'summaries' => $this->service->summaries($professionalScope, $locationScope),
+            'summaries' => $this->service->summaries($professionalScope, $locationScope, $patientScope),
             'statusOptions' => $this->statusOptions(),
             'typeOptions' => $this->typeOptions(),
             'locationOptions' => $this->locationOptions($locationScope),
@@ -185,7 +187,7 @@ class AppointmentController extends Controller
 
         $this->service->cancel(
             $appointment,
-            (string) $request->validated('cancellation_reason'),
+            (string) ($request->validated('cancellation_reason') ?: 'Cancelado por el paciente.'),
             (int) $request->validated('lock_version'),
             $actor,
             $this->auditContext($request),
@@ -351,7 +353,7 @@ class AppointmentController extends Controller
                     'code' => $appointment->consultingRoom->code,
                 ],
             'reason' => $appointment->reason,
-            'is_overbook' => false,
+            'is_overbook' => $appointment->is_overbook,
             'cancellation' => $appointment->cancelled_at === null
                 ? null
                 : [

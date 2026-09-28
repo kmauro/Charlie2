@@ -101,7 +101,7 @@ export interface AppointmentListItem {
     consulting_room_id: number | null;
     consulting_room: { id: number; name: string; code: string } | null;
     reason: string | null;
-    is_overbook: false;
+    is_overbook: boolean;
     cancellation: {
         reason: string;
         at: string;
@@ -147,6 +147,10 @@ export interface AppointmentFormData {
     office: string;
     consulting_room_id: number | '';
     reason: string;
+    is_overbook?: boolean;
+    requested_duration_minutes?: number | '';
+    procedure_resources?: string[];
+    procedure_preparation?: string;
     lock_version?: number;
 }
 

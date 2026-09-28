@@ -17,13 +17,18 @@ class AppointmentPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->hasPermission(UserPermission::ManageAppointments);
+        return $user->hasPermission(UserPermission::ManageAppointments)
+            || ($user->hasRole(RoleCode::Patient) && $user->patient()->exists());
     }
 
     public function view(User $user, Appointment $appointment): bool
     {
         if (! $this->viewAny($user)) {
             return false;
+        }
+
+        if ($user->hasRole(RoleCode::Patient)) {
+            return $appointment->patient()->where('user_id', $user->getKey())->exists();
         }
 
         if ($user->hasRole(RoleCode::SuperAdmin)) {
@@ -67,6 +72,10 @@ class AppointmentPolicy
 
     public function cancel(User $user, Appointment $appointment): bool
     {
+        if ($user->hasRole(RoleCode::Patient)) {
+            return $appointment->patient()->where('user_id', $user->getKey())->exists();
+        }
+
         return $this->canAdministrativelyManage($user)
             && $this->scope->canAccessLocation($user, (int) $appointment->location_id);
     }
