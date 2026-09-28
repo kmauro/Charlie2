@@ -2,7 +2,9 @@
 
 namespace App\Domains\Professionals\Providers;
 
+use App\Domains\Professionals\Models\ConsultingRoom;
 use App\Domains\Professionals\Models\Professional;
+use App\Domains\Professionals\Policies\OperationalAgendaPolicy;
 use App\Domains\Professionals\Policies\ProfessionalPolicy;
 use App\Domains\Professionals\Repositories\Contracts\ProfessionalRepository;
 use App\Domains\Professionals\Repositories\Eloquent\EloquentProfessionalRepository;
@@ -19,5 +21,6 @@ class ProfessionalsServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Professional::class, ProfessionalPolicy::class);
+        Gate::policy(ConsultingRoom::class, OperationalAgendaPolicy::class);
     }
 }

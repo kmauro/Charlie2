@@ -30,6 +30,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
                 'patient_id',
                 'professional_id',
                 'location_id',
+                'consulting_room_id',
                 'starts_at',
                 'ends_at',
                 'duration_minutes',
@@ -48,6 +49,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
                 'professional:id,user_id,specialty',
                 'professional.user:id,name',
                 'location:id,name,code',
+                'consultingRoom:id,name,code',
                 'cancelledBy:id,name',
             ])
             ->when(
@@ -129,6 +131,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
                 'professional:id,user_id,specialty,appointment_duration_minutes',
                 'professional.user:id,name',
                 'location:id,name,code',
+                'consultingRoom:id,name,code',
                 'cancelledBy:id,name',
             ])
             ->findOrFail($id);
@@ -244,6 +247,7 @@ class EloquentAppointmentRepository implements AppointmentRepository
                         'start_time',
                         'end_time',
                     )
+                    ->with('breaks:id,professional_schedule_id,start_time,end_time,label')
                     ->orderBy('weekday')
                     ->orderBy('start_time'),
             ])

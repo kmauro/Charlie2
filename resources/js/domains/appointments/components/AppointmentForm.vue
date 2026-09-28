@@ -3,6 +3,8 @@ import type {
     AppointmentFormData,
     AppointmentFormRecord,
     AppointmentLocationOption,
+    AppointmentRoomOption,
+    AppointmentAgendaConstraints,
     AppointmentOption,
     AppointmentPatientOption,
     AppointmentProfessionalOption,
@@ -18,6 +20,8 @@ const props = withDefaults(
         patientOptions: AppointmentPatientOption[];
         professionalOptions: AppointmentProfessionalOption[];
         locationOptions: AppointmentLocationOption[];
+        roomOptions: AppointmentRoomOption[];
+        agendaConstraints: AppointmentAgendaConstraints;
         typeOptions: AppointmentOption[];
         statusOptions?: AppointmentOption[];
         appointment?: AppointmentFormRecord;
@@ -25,6 +29,12 @@ const props = withDefaults(
         submitUrl: string;
     }>(),
     {
+        roomOptions: () => [],
+        agendaConstraints: () => ({
+            holidays: [],
+            leaves: [],
+            exceptions: [],
+        }),
         statusOptions: () => [],
         appointment: undefined,
         indexUrl: '/turnos',
@@ -54,6 +64,7 @@ const form = useForm<AppointmentFormData>({
     starts_at: initialStart,
     type: props.appointment?.type.value ?? props.typeOptions[0]?.value ?? 'in_person',
     office: props.appointment?.office ?? '',
+    consulting_room_id: props.appointment?.consulting_room_id ?? '',
     reason: props.appointment?.reason ?? '',
     ...(props.appointment
         ? { lock_version: props.appointment.lock_version }
@@ -71,6 +82,52 @@ const selectedLocation = computed(() =>
         (location) => location.value === Number(form.location_id),
     ),
 );
+const isVirtual = computed(() => form.type === 'virtual');
+
+const availableRooms = computed(() =>
+    props.roomOptions.filter(
+        (room) => room.location_id === Number(form.location_id),
+    ),
+);
+
+const selectedException = computed(() =>
+    props.agendaConstraints.exceptions.find(
+        (exception) =>
+            exception.professional_id === Number(form.professional_id)
+            && exception.location_id === Number(form.location_id)
+            && exception.date === appointmentDate.value,
+    ),
+);
+
+const blockedDateReason = computed(() => {
+    const holiday = props.agendaConstraints.holidays.find(
+        (item) =>
+            item.location_id === Number(form.location_id)
+            && item.date === appointmentDate.value,
+    );
+
+    if (holiday) {
+        return `Feriado: ${holiday.name}`;
+    }
+
+    const leave = props.agendaConstraints.leaves.find(
+        (item) =>
+            item.professional_id === Number(form.professional_id)
+            && (item.location_id === null || item.location_id === Number(form.location_id))
+            && item.starts_on <= appointmentDate.value
+            && item.ends_on >= appointmentDate.value,
+    );
+
+    if (leave) {
+        return `Licencia: ${leave.reason}`;
+    }
+
+    if (selectedException.value?.type === 'unavailable') {
+        return selectedException.value.reason || 'Bloqueo excepcional';
+    }
+
+    return null;
+});
 
 const patientComboboxOptions = computed(() =>
     props.patientOptions.map((patient) => ({
@@ -175,8 +232,25 @@ const timeSlots = computed(() => {
 
     const slots = new Map<string, string>();
 
-    relevantSchedules.value
-        .filter((schedule) => schedule.weekday === selectedWeekday.value)
+    if (blockedDateReason.value) {
+        return [];
+    }
+
+    const exception = selectedException.value;
+    const scheduleRanges = exception?.type === 'available'
+        ? [{
+            start_time: exception.start_time ?? '',
+            end_time: exception.end_time ?? '',
+            weekday: selectedWeekday.value,
+            location_id: Number(form.location_id),
+            location_name: selectedLocation.value?.label ?? '',
+            breaks: [],
+        }]
+        : relevantSchedules.value.filter(
+            (schedule) => schedule.weekday === selectedWeekday.value,
+        );
+
+    scheduleRanges
         .forEach((schedule) => {
             const scheduleEnd = minutesFromTime(schedule.end_time);
 
@@ -190,6 +264,16 @@ const timeSlots = computed(() => {
                 const startsAt = new Date(`${appointmentDate.value}T${value}:00`);
 
                 if (!isEditing.value && startsAt <= new Date()) {
+                    continue;
+                }
+
+                const overlapsBreak = (schedule.breaks ?? []).some(
+                    (item) =>
+                        value < item.end_time.slice(0, 5)
+                        && end > item.start_time.slice(0, 5),
+                );
+
+                if (overlapsBreak) {
                     continue;
                 }
 
@@ -242,6 +326,7 @@ watch(
     [() => form.professional_id, () => form.location_id],
     () => {
         appointmentTime.value = '';
+        form.consulting_room_id = '';
     },
 );
 
@@ -250,6 +335,12 @@ watch(appointmentTime, (time) => {
         ? `${appointmentDate.value}T${time}`
         : '';
     form.clearErrors('starts_at');
+});
+
+watch(isVirtual, (virtual) => {
+    if (virtual) {
+        form.consulting_room_id = '';
+    }
 });
 
 const submit = (): void => {
@@ -416,6 +507,12 @@ const submit = (): void => {
                             Los intervalos se calculan según la agenda y duración del profesional.
                         </p>
                         <FieldError id="appointment-start-error" :message="form.errors.starts_at" class="mt-1.5" />
+                        <p
+                            v-if="blockedDateReason"
+                            class="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                        >
+                            {{ blockedDateReason }}
+                        </p>
                     </div>
 
                     <div>
@@ -441,17 +538,27 @@ const submit = (): void => {
                         <label for="appointment-office" class="text-sm font-medium text-slate-800 dark:text-slate-200">
                             Consultorio
                         </label>
-                        <input
+                        <select
                             id="appointment-office"
-                            v-model="form.office"
-                            type="text"
-                            maxlength="100"
-                            :aria-invalid="Boolean(form.errors.office)"
+                            v-model="form.consulting_room_id"
+                            :disabled="isVirtual"
+                            :aria-invalid="Boolean(form.errors.consulting_room_id)"
                             aria-describedby="appointment-office-error"
-                            placeholder="Ej.: Consultorio 204"
-                            class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-950 placeholder:text-slate-400 focus:border-clinic-600 focus:ring-2 focus:ring-clinic-600/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                        />
-                        <FieldError id="appointment-office-error" :message="form.errors.office" class="mt-1.5" />
+                            class="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-950 focus:border-clinic-600 focus:ring-2 focus:ring-clinic-600/20 disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:disabled:bg-slate-900"
+                        >
+                            <option value="">Asignar automáticamente</option>
+                            <option
+                                v-for="room in availableRooms"
+                                :key="room.value"
+                                :value="room.value"
+                            >
+                                {{ room.label }} · {{ room.code }}<template v-if="room.sector"> · {{ room.sector }}</template>
+                            </option>
+                        </select>
+                        <p class="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                            Si no elegís uno, se asignará el primer consultorio disponible de la sede.
+                        </p>
+                        <FieldError id="appointment-office-error" :message="form.errors.consulting_room_id" class="mt-1.5" />
                     </div>
 
                     <div class="lg:col-span-2">

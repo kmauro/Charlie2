@@ -7,6 +7,7 @@ use App\Domains\Appointments\Enums\AppointmentType;
 use App\Domains\Appointments\Policies\AppointmentPolicy;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
+use App\Domains\Professionals\Models\ConsultingRoom;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Users\Models\User;
 use Database\Factories\AppointmentFactory;
@@ -26,6 +27,7 @@ class Appointment extends Model
         'patient_id',
         'professional_id',
         'location_id',
+        'consulting_room_id',
         'starts_at',
         'ends_at',
         'duration_minutes',
@@ -67,6 +69,12 @@ class Appointment extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class);
+    }
+
+    /** @return BelongsTo<ConsultingRoom, $this> */
+    public function consultingRoom(): BelongsTo
+    {
+        return $this->belongsTo(ConsultingRoom::class);
     }
 
     /** @return BelongsTo<User, $this> */

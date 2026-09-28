@@ -48,6 +48,18 @@ class Professional extends Model
         return $this->hasMany(ProfessionalSchedule::class);
     }
 
+    /** @return HasMany<ProfessionalLeave, $this> */
+    public function leaves(): HasMany
+    {
+        return $this->hasMany(ProfessionalLeave::class);
+    }
+
+    /** @return HasMany<ProfessionalScheduleException, $this> */
+    public function scheduleExceptions(): HasMany
+    {
+        return $this->hasMany(ProfessionalScheduleException::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', ProfessionalStatus::Active->value);

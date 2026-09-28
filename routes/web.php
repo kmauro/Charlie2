@@ -12,6 +12,7 @@ use App\Domains\ExternalClinicalRecords\Controllers\ExternalClinicalRecordContro
 use App\Domains\Organizations\Controllers\LegalEntityController;
 use App\Domains\Organizations\Controllers\OrganizationController;
 use App\Domains\Patients\Controllers\PatientController;
+use App\Domains\Professionals\Controllers\OperationalAgendaController;
 use App\Domains\Professionals\Controllers\ProfessionalController;
 use App\Domains\Users\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -69,6 +70,21 @@ Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void 
         Route::put('/{professional}', 'update')->name('update');
         Route::delete('/{professional}', 'destroy')->name('destroy');
         Route::patch('/{professional}/restaurar', 'restore')->name('restore');
+    });
+
+    Route::controller(OperationalAgendaController::class)->prefix('agenda-operativa')->name('operational_agenda.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/consultorios', 'storeRoom')->name('rooms.store');
+        Route::delete('/consultorios/{room}', 'destroyRoom')->name('rooms.destroy');
+        Route::post('/feriados', 'storeHoliday')->name('holidays.store');
+        Route::delete('/feriados/{holiday}', 'destroyHoliday')->name('holidays.destroy');
+        Route::post('/licencias', 'storeLeave')->name('leaves.store');
+        Route::delete('/licencias/{leave}', 'destroyLeave')->name('leaves.destroy');
+        Route::post('/excepciones', 'storeException')->name('exceptions.store');
+        Route::delete('/excepciones/{exception}', 'destroyException')->name('exceptions.destroy');
+        Route::post('/franjas/{schedule}/descansos', 'storeBreak')->name('breaks.store');
+        Route::delete('/descansos/{break}', 'destroyBreak')->name('breaks.destroy');
+        Route::patch('/franjas/{schedule}/consultorio', 'updateScheduleRoom')->name('schedules.room');
     });
 
     Route::controller(PatientController::class)->prefix('pacientes')->name('patients.')->group(function (): void {

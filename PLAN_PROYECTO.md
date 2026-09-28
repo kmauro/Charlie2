@@ -58,10 +58,10 @@ La primera fase contempló:
 - Autenticación: implementada, incluido el registro mediante invitaciones firmadas, temporales y de un solo uso.
 - Dashboard: interfaz implementada con métricas operativas y pruebas coherentes.
 - Usuarios: gestión, roles, permisos individuales efectivos, suspensión, restauración, reinvitación, recuperación de contraseña y alcance por múltiples sedes y razones sociales implementados.
-- Profesionales: gestión, matrícula, especialidad, duración de turnos, horarios por sede y modalidad de consultorio implementados.
+- Profesionales: gestión, matrícula, especialidad, duración de turnos, horarios por sede, descansos, feriados, licencias, excepciones por fecha y agenda operativa implementados.
 - Pacientes: gestión administrativa, contactos, cobertura, estados, archivado y control de concurrencia implementados.
 - Razones sociales y sedes: persistencia, validación, archivado y restauración implementados.
-- Turnos: núcleo funcional implementado, aunque originalmente pertenecía a una fase posterior.
+- Turnos: núcleo funcional implementado con asignación manual o automática de consultorio y bloqueo de conflictos de profesional, paciente, agenda y consultorio.
 - Auditoría: base append-only, eventos de autenticación y dominios estabilizados, consulta, filtros, exportación exclusiva del auditor y retención anual con aviso por correo implementados.
 - Historia clínica interna: retirada del código, las rutas, la interfaz, las migraciones, las pruebas y la base de datos.
 - Acceso clínico externo: implementado desde la ficha del paciente para profesionales con relación asistencial vigente, mediante una URL HTTPS configurable y con auditoría de accesos permitidos, denegados y fallos de configuración.
@@ -533,7 +533,7 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 
 1. Razones sociales y sedes: implementado, incluido el alcance de usuarios sobre múltiples sedes y razones sociales.
 2. Usuarios y permisos configurables: implementados y aplicados en las policies; autenticación multifactor pendiente.
-3. Profesionales: núcleo implementado; descansos, feriados, licencias, excepciones y catálogo operativo de consultorios pendientes.
+3. Profesionales: implementado el núcleo y la agenda avanzada con descansos, feriados por sede, licencias, excepciones por fecha, catálogo operativo de consultorios y asignación fija, manual o automática.
 4. Pacientes y responsables: gestión administrativa y acceso externo básico implementados; vinculación federada o contextual con la webapp externa pendiente.
 5. Turnos: núcleo implementado; sobreturnos, lista de espera, bloqueos, recurrencia y autogestión pendientes.
 6. Integración clínica externa: parcialmente implementada; el módulo interno fue retirado y existe un enlace HTTPS autorizado y auditado. Quedan pendientes la URL productiva y el contrato de autenticación/contexto con el proveedor.
@@ -551,7 +551,7 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 2. Reemplazar la URL de demostración por la URL productiva y validar el flujo de extremo a extremo.
 3. Implementar el mecanismo federado o temporal acordado sin exponer datos sensibles en la URL.
 4. Completar la prueba integral Docker de cola, scheduler, Mailpit y persistencia tras reinicios.
-5. Priorizar autenticación multifactor, agenda avanzada y evolución de turnos antes de iniciar los módulos operativos y contables posteriores.
+5. Priorizar autenticación multifactor y evolución de turnos antes de iniciar los módulos operativos y contables posteriores.
 
 ## 18. Decisiones de acceso confirmadas
 

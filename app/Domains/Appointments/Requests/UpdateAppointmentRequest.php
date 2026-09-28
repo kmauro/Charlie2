@@ -6,6 +6,7 @@ use App\Domains\Appointments\Enums\AppointmentType;
 use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
+use App\Domains\Professionals\Models\ConsultingRoom;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Users\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
@@ -41,6 +42,11 @@ class UpdateAppointmentRequest extends FormRequest
                 'required',
                 'integer',
                 Rule::exists((new Location)->getTable(), 'id'),
+            ],
+            'consulting_room_id' => [
+                'nullable',
+                'integer',
+                Rule::exists((new ConsultingRoom)->getTable(), 'id')->where('is_active', true),
             ],
             'starts_at' => ['required', 'date', 'after:now'],
             'type' => ['required', Rule::enum(AppointmentType::class)],

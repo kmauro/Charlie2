@@ -205,6 +205,8 @@ class AppointmentController extends Controller
             'patientOptions' => $this->patientOptions(),
             'professionalOptions' => $this->professionalOptions($professionalScope, $locationScope),
             'locationOptions' => $this->locationOptions($locationScope),
+            'roomOptions' => $this->roomOptions($locationScope),
+            'agendaConstraints' => $this->service->agendaConstraints($professionalScope, $locationScope),
             'typeOptions' => $this->typeOptions(),
             'statusOptions' => $this->statusOptions(),
         ];
@@ -240,6 +242,11 @@ class AppointmentController extends Controller
                         'start_time' => $schedule->start_time,
                         'end_time' => $schedule->end_time,
                         'location_name' => $schedule->location_name,
+                        'breaks' => $schedule->breaks->map(fn ($break): array => [
+                            'start_time' => $break->start_time,
+                            'end_time' => $break->end_time,
+                            'label' => $break->label,
+                        ])->all(),
                     ])
                     ->values()
                     ->all(),
@@ -255,6 +262,20 @@ class AppointmentController extends Controller
                 'value' => (int) $location->getKey(),
                 'label' => $location->name,
                 'code' => $location->code,
+            ])
+            ->all();
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function roomOptions(?array $locationIds = null): array
+    {
+        return $this->service->activeConsultingRooms($locationIds)
+            ->map(fn ($room): array => [
+                'value' => (int) $room->getKey(),
+                'location_id' => $room->location_id,
+                'label' => $room->name,
+                'code' => $room->code,
+                'sector' => $room->sector,
             ])
             ->all();
     }
@@ -321,6 +342,14 @@ class AppointmentController extends Controller
                 'label' => $appointment->type->label(),
             ],
             'office' => $appointment->office,
+            'consulting_room_id' => $appointment->consulting_room_id,
+            'consulting_room' => $appointment->consultingRoom === null
+                ? null
+                : [
+                    'id' => (int) $appointment->consultingRoom->getKey(),
+                    'name' => $appointment->consultingRoom->name,
+                    'code' => $appointment->consultingRoom->code,
+                ],
             'reason' => $appointment->reason,
             'is_overbook' => false,
             'cancellation' => $appointment->cancelled_at === null

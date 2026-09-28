@@ -106,6 +106,18 @@ const navigationItems = [
         ],
     },
     {
+        label: 'Agenda operativa',
+        href: '/agenda-operativa',
+        icon: 'clock',
+        allowedRoles: [
+            'superadmin',
+            'administrator',
+            'supervisor',
+            'reception',
+            'professional',
+        ],
+    },
+    {
         label: 'Sedes',
         href: '/organizacion/sedes',
         icon: 'building',

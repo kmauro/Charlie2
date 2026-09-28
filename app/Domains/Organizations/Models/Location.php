@@ -4,11 +4,14 @@ namespace App\Domains\Organizations\Models;
 
 use App\Domains\Organizations\Enums\OrganizationStatus;
 use App\Domains\Organizations\Policies\LocationPolicy;
+use App\Domains\Professionals\Models\ConsultingRoom;
+use App\Domains\Professionals\Models\LocationHoliday;
 use Database\Factories\LocationFactory;
 use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use LogicException;
 
 #[UsePolicy(LocationPolicy::class)]
@@ -44,6 +47,18 @@ class Location extends Model
     public function legalEntity(): BelongsTo
     {
         return $this->belongsTo(LegalEntity::class);
+    }
+
+    /** @return HasMany<ConsultingRoom, $this> */
+    public function consultingRooms(): HasMany
+    {
+        return $this->hasMany(ConsultingRoom::class);
+    }
+
+    /** @return HasMany<LocationHoliday, $this> */
+    public function holidays(): HasMany
+    {
+        return $this->hasMany(LocationHoliday::class);
     }
 
     public function isArchived(): bool

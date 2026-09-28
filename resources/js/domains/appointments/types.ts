@@ -24,6 +24,39 @@ export interface ProfessionalScheduleOption {
     start_time: string;
     end_time: string;
     location_name: string;
+    breaks?: Array<{
+        start_time: string;
+        end_time: string;
+        label?: string | null;
+    }>;
+}
+
+export interface AppointmentRoomOption {
+    value: number;
+    location_id: number;
+    label: string;
+    code: string;
+    sector?: string | null;
+}
+
+export interface AppointmentAgendaConstraints {
+    holidays: Array<{ location_id: number; date: string; name: string }>;
+    leaves: Array<{
+        professional_id: number;
+        location_id: number | null;
+        starts_on: string;
+        ends_on: string;
+        reason: string;
+    }>;
+    exceptions: Array<{
+        professional_id: number;
+        location_id: number;
+        date: string;
+        type: 'available' | 'unavailable';
+        start_time: string | null;
+        end_time: string | null;
+        reason: string | null;
+    }>;
 }
 
 export interface AppointmentProfessionalOption {
@@ -65,6 +98,8 @@ export interface AppointmentListItem {
     status: AppointmentOption;
     type: AppointmentOption;
     office: string | null;
+    consulting_room_id: number | null;
+    consulting_room: { id: number; name: string; code: string } | null;
     reason: string | null;
     is_overbook: false;
     cancellation: {
@@ -110,6 +145,7 @@ export interface AppointmentFormData {
     starts_at: string;
     type: string;
     office: string;
+    consulting_room_id: number | '';
     reason: string;
     lock_version?: number;
 }

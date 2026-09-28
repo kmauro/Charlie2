@@ -13,8 +13,13 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Enums\ProfessionalStatus;
+use App\Domains\Professionals\Enums\ScheduleExceptionType;
+use App\Domains\Professionals\Models\ConsultingRoom;
+use App\Domains\Professionals\Models\LocationHoliday;
 use App\Domains\Professionals\Models\Professional;
+use App\Domains\Professionals\Models\ProfessionalLeave;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
+use App\Domains\Professionals\Models\ProfessionalScheduleException;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserScopeService;
@@ -119,6 +124,65 @@ class AppointmentService
         return $this->appointments->activeLocations($locationIds);
     }
 
+    /** @return Collection<int, ConsultingRoom> */
+    public function activeConsultingRooms(?array $locationIds = null): Collection
+    {
+        return ConsultingRoom::query()
+            ->select(['id', 'location_id', 'name', 'code', 'sector'])
+            ->where('is_active', true)
+            ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
+            ->orderBy('location_id')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** @return array<string, array<int, array<string, mixed>>> */
+    public function agendaConstraints(?int $professionalId, ?array $locationIds): array
+    {
+        return [
+            'holidays' => LocationHoliday::query()
+                ->select(['location_id', 'date', 'name'])
+                ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
+                ->whereDate('date', '>=', today())
+                ->get()
+                ->map(fn (LocationHoliday $holiday): array => [
+                    'location_id' => $holiday->location_id,
+                    'date' => $holiday->date->format('Y-m-d'),
+                    'name' => $holiday->name,
+                ])->all(),
+            'leaves' => ProfessionalLeave::query()
+                ->select(['professional_id', 'location_id', 'starts_on', 'ends_on', 'reason'])
+                ->when($professionalId !== null, fn ($query) => $query->where('professional_id', $professionalId))
+                ->when($locationIds !== null, fn ($query) => $query->where(
+                    fn ($nested) => $nested->whereNull('location_id')->orWhereIn('location_id', $locationIds),
+                ))
+                ->whereDate('ends_on', '>=', today())
+                ->get()
+                ->map(fn (ProfessionalLeave $leave): array => [
+                    'professional_id' => $leave->professional_id,
+                    'location_id' => $leave->location_id,
+                    'starts_on' => $leave->starts_on->format('Y-m-d'),
+                    'ends_on' => $leave->ends_on->format('Y-m-d'),
+                    'reason' => $leave->reason,
+                ])->all(),
+            'exceptions' => ProfessionalScheduleException::query()
+                ->select(['professional_id', 'location_id', 'date', 'type', 'start_time', 'end_time', 'reason'])
+                ->when($professionalId !== null, fn ($query) => $query->where('professional_id', $professionalId))
+                ->when($locationIds !== null, fn ($query) => $query->whereIn('location_id', $locationIds))
+                ->whereDate('date', '>=', today())
+                ->get()
+                ->map(fn (ProfessionalScheduleException $exception): array => [
+                    'professional_id' => $exception->professional_id,
+                    'location_id' => $exception->location_id,
+                    'date' => $exception->date->format('Y-m-d'),
+                    'type' => $exception->type->value,
+                    'start_time' => $exception->start_time,
+                    'end_time' => $exception->end_time,
+                    'reason' => $exception->reason,
+                ])->all(),
+        ];
+    }
+
     /** @param array<string, mixed> $data */
     public function create(
         array $data,
@@ -133,16 +197,14 @@ class AppointmentService
                 $professional,
                 $location,
             );
-            $office = $this->appointmentOffice($data, $professional);
-
             $this->ensureCanSchedule(
                 $patient,
                 $professional,
                 $location,
                 $startsAt,
                 $endsAt,
-                $office,
             );
+            $room = $this->resolveConsultingRoom($data, $professional, $location, $startsAt, $endsAt);
 
             $appointment = $this->appointments->create(
                 $this->appointmentAttributes(
@@ -150,7 +212,8 @@ class AppointmentService
                     $startsAt,
                     $endsAt,
                     $durationMinutes,
-                    $office,
+                    $room,
+                    $professional,
                 ),
             );
 
@@ -200,15 +263,20 @@ class AppointmentService
                 $professional,
                 $location,
             );
-            $office = $this->appointmentOffice($data, $professional);
-
             $this->ensureCanSchedule(
                 $patient,
                 $professional,
                 $location,
                 $startsAt,
                 $endsAt,
-                $office,
+                (int) $lockedAppointment->getKey(),
+            );
+            $room = $this->resolveConsultingRoom(
+                $data,
+                $professional,
+                $location,
+                $startsAt,
+                $endsAt,
                 (int) $lockedAppointment->getKey(),
             );
 
@@ -221,7 +289,8 @@ class AppointmentService
                         $startsAt,
                         $endsAt,
                         $durationMinutes,
-                        $office,
+                        $room,
+                        $professional,
                     ),
                     'status' => $lockedAppointment->status,
                     'lock_version' => $lockedAppointment->lock_version + 1,
@@ -393,7 +462,6 @@ class AppointmentService
         Location $location,
         CarbonInterface $startsAt,
         CarbonInterface $endsAt,
-        ?string $office,
         ?int $exceptAppointmentId = null,
     ): void {
         if (! in_array($patient->status, [
@@ -447,17 +515,6 @@ class AppointmentService
             ]);
         }
 
-        if ($office !== null && $this->appointments->hasOfficeConflict(
-            (int) $location->getKey(),
-            $office,
-            $startsAt,
-            $endsAt,
-            $exceptAppointmentId,
-        )) {
-            throw ValidationException::withMessages([
-                'office' => 'El consultorio ya está ocupado durante ese horario.',
-            ]);
-        }
     }
 
     private function ensureWithinLocationHours(
@@ -483,13 +540,56 @@ class AppointmentService
         CarbonInterface $startsAt,
         CarbonInterface $endsAt,
     ): void {
-        $normalizedLocationName = Str::lower(Str::squish($location->name));
+        if (LocationHoliday::query()
+            ->where('location_id', $location->getKey())
+            ->whereDate('date', $startsAt->toDateString())
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'La sede no atiende en la fecha seleccionada por feriado.',
+            ]);
+        }
+
+        if (ProfessionalLeave::query()
+            ->where('professional_id', $professional->getKey())
+            ->where(fn ($query) => $query
+                ->whereNull('location_id')
+                ->orWhere('location_id', $location->getKey()))
+            ->whereDate('starts_on', '<=', $startsAt->toDateString())
+            ->whereDate('ends_on', '>=', $startsAt->toDateString())
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El profesional se encuentra de licencia en la fecha seleccionada.',
+            ]);
+        }
+
         $startTime = $startsAt->format('H:i:s');
         $endTime = $endsAt->format('H:i:s');
-        $matchesSchedule = $professional->schedules()
+        $exception = ProfessionalScheduleException::query()
+            ->where('professional_id', $professional->getKey())
+            ->where('location_id', $location->getKey())
+            ->whereDate('date', $startsAt->toDateString())
+            ->first();
+
+        if ($exception !== null) {
+            $available = $exception->type === ScheduleExceptionType::Available
+                && $startTime >= $this->normalizedTime((string) $exception->start_time)
+                && $endTime <= $this->normalizedTime((string) $exception->end_time);
+
+            if (! $available) {
+                throw ValidationException::withMessages([
+                    'starts_at' => 'El horario está bloqueado por una excepción de agenda.',
+                ]);
+            }
+
+            return;
+        }
+
+        $normalizedLocationName = Str::lower(Str::squish($location->name));
+        $matchingSchedule = $professional->schedules()
+            ->with('breaks')
             ->where('weekday', $startsAt->dayOfWeekIso)
-            ->get(['location_id', 'location_name', 'start_time', 'end_time'])
-            ->contains(
+            ->get(['id', 'location_id', 'location_name', 'start_time', 'end_time'])
+            ->first(
                 fn (ProfessionalSchedule $schedule): bool => (
                     $schedule->location_id !== null
                         ? $schedule->location_id === (int) $location->getKey()
@@ -501,9 +601,18 @@ class AppointmentService
                     && $endTime <= $this->normalizedTime($schedule->end_time),
             );
 
-        if (! $matchesSchedule) {
+        if ($matchingSchedule === null) {
             throw ValidationException::withMessages([
                 'starts_at' => 'El horario no pertenece a la agenda del profesional en la sede seleccionada.',
+            ]);
+        }
+
+        if ($matchingSchedule->breaks->contains(
+            fn ($break): bool => $startTime < $this->normalizedTime($break->end_time)
+                && $endTime > $this->normalizedTime($break->start_time),
+        )) {
+            throw ValidationException::withMessages([
+                'starts_at' => 'El horario se superpone con un descanso del profesional.',
             ]);
         }
     }
@@ -532,7 +641,8 @@ class AppointmentService
         CarbonInterface $startsAt,
         CarbonInterface $endsAt,
         int $durationMinutes,
-        ?string $office,
+        ?ConsultingRoom $room,
+        Professional $professional,
     ): array {
         $type = AppointmentType::from((string) $data['type']);
 
@@ -540,12 +650,17 @@ class AppointmentService
             'patient_id' => (int) $data['patient_id'],
             'professional_id' => (int) $data['professional_id'],
             'location_id' => (int) $data['location_id'],
+            'consulting_room_id' => $room?->getKey(),
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
             'duration_minutes' => $durationMinutes,
             'type' => $type,
             'status' => AppointmentStatus::Reserved,
-            'office' => $office,
+            'office' => $room?->name
+                ?? ($type === AppointmentType::Virtual
+                    ? null
+                    : ($this->nullableString($data['office'] ?? null)
+                        ?? $this->nullableString($professional->fixed_office))),
             'reason' => $this->nullableString($data['reason'] ?? null),
             'is_overbook' => false,
             'lock_version' => 1,
@@ -553,16 +668,89 @@ class AppointmentService
     }
 
     /** @param array<string, mixed> $data */
-    private function appointmentOffice(
+    private function resolveConsultingRoom(
         array $data,
         Professional $professional,
-    ): ?string {
+        Location $location,
+        CarbonInterface $startsAt,
+        CarbonInterface $endsAt,
+        ?int $exceptAppointmentId = null,
+    ): ?ConsultingRoom {
         if (AppointmentType::from((string) $data['type']) === AppointmentType::Virtual) {
             return null;
         }
 
-        return $this->nullableString($data['office'] ?? null)
-            ?? $this->nullableString($professional->fixed_office);
+        $requestedRoomId = isset($data['consulting_room_id'])
+            ? (int) $data['consulting_room_id']
+            : null;
+        $fixedRoomId = $professional->schedules()
+            ->where('location_id', $location->getKey())
+            ->where('weekday', $startsAt->dayOfWeekIso)
+            ->where('start_time', '<=', $startsAt->format('H:i:s'))
+            ->where('end_time', '>=', $endsAt->format('H:i:s'))
+            ->value('consulting_room_id');
+        $preferredRoomId = $requestedRoomId;
+
+        if ($preferredRoomId === null
+            && $fixedRoomId !== null
+            && ConsultingRoom::query()
+                ->whereKey($fixedRoomId)
+                ->where('location_id', $location->getKey())
+                ->where('is_active', true)
+                ->exists()) {
+            $preferredRoomId = (int) $fixedRoomId;
+        }
+
+        $rooms = ConsultingRoom::query()
+            ->where('location_id', $location->getKey())
+            ->where('is_active', true)
+            ->when($preferredRoomId !== null, fn ($query) => $query->whereKey($preferredRoomId))
+            ->orderBy('name')
+            ->lockForUpdate()
+            ->get();
+
+        if ($preferredRoomId !== null && $rooms->isEmpty()) {
+            throw ValidationException::withMessages([
+                'consulting_room_id' => 'El consultorio seleccionado no está activo o no pertenece a la sede.',
+            ]);
+        }
+
+        $availableRoom = $rooms->first(fn (ConsultingRoom $room): bool => ! Appointment::query()
+            ->where('consulting_room_id', $room->getKey())
+            ->whereIn('status', AppointmentStatus::blockingValues())
+            ->where('starts_at', '<', $endsAt)
+            ->where('ends_at', '>', $startsAt)
+            ->when($exceptAppointmentId !== null, fn ($query) => $query->whereKeyNot($exceptAppointmentId))
+            ->exists());
+
+        if ($availableRoom === null && $rooms->isEmpty() && $preferredRoomId === null) {
+            $legacyOffice = $this->nullableString($data['office'] ?? null)
+                ?? $this->nullableString($professional->fixed_office);
+
+            if ($legacyOffice !== null && $this->appointments->hasOfficeConflict(
+                (int) $location->getKey(),
+                $legacyOffice,
+                $startsAt,
+                $endsAt,
+                $exceptAppointmentId,
+            )) {
+                throw ValidationException::withMessages([
+                    'office' => 'El consultorio ya está ocupado durante ese horario.',
+                ]);
+            }
+
+            return null;
+        }
+
+        if ($availableRoom === null) {
+            throw ValidationException::withMessages([
+                'consulting_room_id' => $preferredRoomId === null
+                    ? 'No hay consultorios disponibles durante ese horario.'
+                    : 'El consultorio seleccionado ya está ocupado durante ese horario.',
+            ]);
+        }
+
+        return $availableRoom;
     }
 
     /** @return array<string, mixed> */
@@ -572,6 +760,7 @@ class AppointmentService
             'patient_id' => $appointment->patient_id,
             'professional_id' => $appointment->professional_id,
             'location_id' => $appointment->location_id,
+            'consulting_room_id' => $appointment->consulting_room_id,
             'starts_at' => $appointment->starts_at->toISOString(),
             'ends_at' => $appointment->ends_at->toISOString(),
             'duration_minutes' => $appointment->duration_minutes,

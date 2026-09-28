@@ -187,6 +187,10 @@ it('renders index and form contracts from persisted references', function () {
                     ->etc())
                 ->etc())
             ->has('locationOptions', 1)
+            ->has('roomOptions')
+            ->has('agendaConstraints.holidays')
+            ->has('agendaConstraints.leaves')
+            ->has('agendaConstraints.exceptions')
             ->has('typeOptions', count(AppointmentType::cases()))
             ->has('statusOptions', count(AppointmentStatus::cases()))
             ->has('urls'));
