@@ -5,6 +5,7 @@ namespace App\Domains\Billing\Models;
 use Database\Factories\Domains\Billing\Models\JournalEntryLineFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class JournalEntryLine extends Model
 {
@@ -12,6 +13,12 @@ class JournalEntryLine extends Model
     use HasFactory;
 
     protected $fillable = ['journal_entry_id', 'account_id', 'debit', 'credit'];
+
+    /** @return BelongsTo<Account, $this> */
+    public function account(): BelongsTo
+    {
+        return $this->belongsTo(Account::class);
+    }
 
     protected function casts(): array
     {

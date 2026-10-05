@@ -24,7 +24,7 @@ class BillingService
 {
     public function __construct(private BillingSetupService $setup) {}
 
-    /** @param array{location_id: int, patient_id?: int|null, appointment_id?: int|null, type: string, items: array<int, array{description: string, quantity: numeric, unit_price: numeric, tax_rate?: numeric}>, installments?: array<int, array{amount: numeric, due_date: string}>} $data */
+    /** @param array{location_id: int, patient_id?: int|null, payer_type: string, coverage_name?: string|null, coverage_amount?: numeric, appointment_id?: int|null, type: string, items: array<int, array{description: string, quantity: numeric, unit_price: numeric, tax_rate?: numeric}>, installments?: array<int, array{amount: numeric, due_date: string}>} $data */
     public function issueInvoice(array $data, User $actor): Invoice
     {
         return DB::transaction(function () use ($data, $actor): Invoice {
@@ -40,10 +40,26 @@ class BillingService
             }
 
             $totalAmount = round($netAmount + $taxAmount, 2);
+            $coverageAmount = round((float) ($data['coverage_amount'] ?? 0), 2);
+
+            if ($data['payer_type'] === 'coverage' && $coverageAmount !== $totalAmount) {
+                throw ValidationException::withMessages([
+                    'coverage_amount' => 'La cobertura debe asumir el total del comprobante.',
+                ]);
+            }
+
+            if ($data['payer_type'] === 'mixed' && ($coverageAmount <= 0 || $coverageAmount >= $totalAmount)) {
+                throw ValidationException::withMessages([
+                    'coverage_amount' => 'La cobertura debe asumir una parte del total.',
+                ]);
+            }
             $invoice = Invoice::create([
                 'legal_entity_id' => $location->legal_entity_id,
                 'location_id' => $location->getKey(),
                 'patient_id' => $data['patient_id'] ?? null,
+                'payer_type' => $data['payer_type'],
+                'coverage_name' => $data['coverage_name'] ?? null,
+                'coverage_amount' => $coverageAmount,
                 'appointment_id' => $data['appointment_id'] ?? null,
                 'created_by' => $actor->getKey(),
                 'type' => $data['type'],
@@ -95,7 +111,7 @@ class BillingService
             }
             $creditNote = Invoice::create([
                 'legal_entity_id' => $original->legal_entity_id, 'location_id' => $original->location_id,
-                'patient_id' => $original->patient_id, 'created_by' => $actor->getKey(), 'original_invoice_id' => $original->getKey(),
+                'patient_id' => $original->patient_id, 'payer_type' => $original->payer_type, 'coverage_name' => $original->coverage_name, 'coverage_amount' => 0, 'created_by' => $actor->getKey(), 'original_invoice_id' => $original->getKey(),
                 'type' => 'credit_note', 'status' => 'issued', 'number' => $this->nextNumber((int) $original->legal_entity_id, 'credit_note'),
                 'currency' => $original->currency, 'net_amount' => $amount, 'tax_amount' => 0, 'total_amount' => $amount, 'issued_at' => now(),
             ]);
@@ -115,6 +131,28 @@ class BillingService
         }
 
         return Refund::create(['invoice_id' => $invoice->getKey(), 'requested_by' => $actor->getKey(), 'amount' => $amount, 'reason' => $reason, 'status' => 'pending']);
+    }
+
+    public function cancelInvoice(Invoice $invoice, string $reason, User $actor): Invoice
+    {
+        return DB::transaction(function () use ($invoice, $reason, $actor): Invoice {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
+
+            if ($invoice->status === 'canceled' || (float) $invoice->paid_amount > 0) {
+                throw ValidationException::withMessages([
+                    'invoice' => 'Sólo se pueden anular comprobantes sin cobros registrados.',
+                ]);
+            }
+
+            $invoice->update([
+                'status' => 'canceled',
+                'canceled_by' => $actor->getKey(),
+                'canceled_at' => now(),
+                'cancellation_reason' => $reason,
+            ]);
+
+            return $invoice->refresh();
+        }, 3);
     }
 
     /** @param array{invoice_id: int, payment_method_id: int, amount: numeric, reference?: string|null} $data */

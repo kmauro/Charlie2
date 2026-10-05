@@ -8,6 +8,7 @@ use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Models\Role;
 use App\Domains\Users\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -53,7 +54,7 @@ class UpdateUserRequest extends FormRequest
         $this->merge([
             'name' => Str::of((string) $this->input('name'))->squish()->toString(),
             'email' => Str::of((string) $this->input('email'))->trim()->lower()->toString(),
-            'permissions' => $this->input('permissions', []),
+            'permissions' => Arr::wrap($this->input('permissions', [])),
             'legal_entity_ids' => $this->input('legal_entity_ids', []),
             'location_ids' => $this->input('location_ids', []),
         ]);

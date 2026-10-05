@@ -255,7 +255,8 @@ it('edits suspends and restores a user without deleting their record', function 
             'role_id' => $managerRole->getKey(),
             'permissions' => [UserPermission::ViewAccounting->value],
         ])
-        ->assertRedirect(route('users.index'));
+        ->assertRedirect(route('users.index'))
+        ->assertInertiaFlash('success', 'El usuario fue actualizado correctamente.');
 
     $target->refresh();
 
@@ -278,6 +279,25 @@ it('edits suspends and restores a user without deleting their record', function 
         ->assertInertiaFlash('success');
 
     expect($target->refresh()->status)->toBe(UserStatus::Active);
+});
+
+it('updates a user when a single permission is submitted as a scalar value', function () {
+    $actor = usersSuperAdmin();
+    $target = User::factory()->create();
+    $managerRole = usersRole(RoleCode::Manager);
+
+    $this->actingAs($actor)
+        ->put(route('users.update', $target), [
+            'name' => $target->name,
+            'email' => $target->email,
+            'role_id' => $managerRole->getKey(),
+            'permissions' => UserPermission::ViewAccounting->value,
+        ])
+        ->assertRedirect(route('users.index'));
+
+    expect($target->refresh()->permissions)->toBe([
+        UserPermission::ViewAccounting->value,
+    ]);
 });
 
 it('requires professional account state to be managed from the professionals module', function () {

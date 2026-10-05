@@ -4,8 +4,8 @@ import BrandMark from '@/shared/components/BrandMark.vue';
 import FlashMessage from '@/shared/components/FlashMessage.vue';
 import { useTheme } from '@/shared/composables/useTheme';
 import type { AppFlashData } from '@/shared/types/inertia';
-import { Link, usePage } from '@inertiajs/vue3';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
@@ -50,6 +50,100 @@ const accountRoleCode = computed(() => {
 
     return typeof role === 'object' && role !== null ? role.code : '';
 });
+const organizationContext = computed(() => page.props.organizationContext);
+const locationOptions = computed(() => organizationContext.value.entities.flatMap((entity) =>
+    entity.locations.map((location) => ({
+        ...location,
+        legalEntityId: entity.id,
+        legalEntityName: entity.name,
+    })),
+));
+const selectedLocationId = ref<number | null>(
+    organizationContext.value.selectedLocationId,
+);
+const selectedLocation = computed(() => locationOptions.value.find(
+    (location) => location.id === selectedLocationId.value,
+));
+const selectedLegalEntityName = computed(() =>
+    selectedLocation.value?.legalEntityName ?? 'Sin razón social asignada',
+);
+const selectedLocationName = computed(() =>
+    selectedLocation.value?.name ?? 'Sin sede asignada',
+);
+const organizationSelectorLocked = computed(() =>
+    organizationContext.value.isLocked || locationOptions.value.length === 0,
+);
+const organizationSelector = ref<HTMLElement>();
+const organizationSelectorSearchInput = ref<HTMLInputElement>();
+const organizationSelectorOpen = ref(false);
+const organizationSelectorQuery = ref('');
+const normalizeSearch = (value: string): string => value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLocaleLowerCase('es-AR')
+    .trim();
+const filteredOrganizationEntities = computed(() => {
+    const query = normalizeSearch(organizationSelectorQuery.value);
+
+    if (!query) {
+        return organizationContext.value.entities;
+    }
+
+    return organizationContext.value.entities
+        .map((entity) => ({
+            ...entity,
+            locations: entity.locations.filter((location) =>
+                normalizeSearch(`${entity.name} ${location.name}`).includes(query),
+            ),
+        }))
+        .filter((entity) => entity.locations.length > 0);
+});
+const openOrganizationSelector = async (): Promise<void> => {
+    if (organizationSelectorLocked.value) {
+        return;
+    }
+
+    organizationSelectorOpen.value = true;
+    await nextTick();
+    organizationSelectorSearchInput.value?.focus();
+};
+const closeOrganizationSelector = (): void => {
+    organizationSelectorOpen.value = false;
+    organizationSelectorQuery.value = '';
+};
+const toggleOrganizationSelector = (): void => {
+    if (organizationSelectorOpen.value) {
+        closeOrganizationSelector();
+
+        return;
+    }
+
+    void openOrganizationSelector();
+};
+const selectOrganizationLocation = (locationId: number): void => {
+    selectedLocationId.value = locationId;
+    closeOrganizationSelector();
+    updateOrganizationContext();
+};
+const handleOrganizationSelectorOutsideClick = (event: MouseEvent): void => {
+    if (
+        event.target instanceof Node
+        && !organizationSelector.value?.contains(event.target)
+    ) {
+        closeOrganizationSelector();
+    }
+};
+const updateOrganizationContext = (): void => {
+    if (selectedLocationId.value === null) {
+        return;
+    }
+
+    router.post(
+        '/contexto-organizacion',
+        { location_id: selectedLocationId.value },
+        { preserveScroll: true, preserveState: false },
+    );
+};
 const accountInitials = computed(() =>
     accountName.value
         .trim()
@@ -120,6 +214,12 @@ const navigationItems = [
         ],
     },
     {
+        label: 'Contabilidad',
+        href: '/facturacion?seccion=contabilidad',
+        icon: 'receipt',
+        allowedRoles: ['superadmin', 'administrator', 'manager', 'accounting'],
+    },
+    {
         label: 'Agenda operativa',
         href: '/agenda-operativa',
         icon: 'clock',
@@ -186,6 +286,11 @@ onMounted(() => {
         'change',
         updateDesktopNavigation,
     );
+    document.addEventListener('click', handleOrganizationSelectorOutsideClick);
+});
+
+watch(() => organizationContext.value.selectedLocationId, (locationId) => {
+    selectedLocationId.value = locationId;
 });
 
 onUnmounted(() => {
@@ -193,6 +298,7 @@ onUnmounted(() => {
         'change',
         updateDesktopNavigation,
     );
+    document.removeEventListener('click', handleOrganizationSelectorOutsideClick);
 });
 </script>
 
@@ -243,28 +349,100 @@ onUnmounted(() => {
             <div
                 class="mt-7 rounded-2xl border border-clinic-100 bg-clinic-50/80 p-3 dark:border-clinic-900/60 dark:bg-clinic-950/30"
             >
-                <div class="flex items-center gap-3">
-                    <span
-                        class="grid size-9 place-items-center rounded-xl bg-white text-clinic-700 shadow-sm dark:bg-slate-800 dark:text-clinic-300"
+                <div ref="organizationSelector" class="relative">
+                    <button
+                        type="button"
+                        class="flex w-full items-center gap-3 rounded-xl p-1 text-left transition focus-visible:ring-2 focus-visible:ring-clinic-600/40 disabled:cursor-default"
+                        :class="organizationSelectorLocked
+                            ? 'opacity-75'
+                            : 'hover:bg-white/70 dark:hover:bg-slate-800/70'"
+                        :disabled="organizationSelectorLocked"
+                        aria-haspopup="listbox"
+                        :aria-expanded="organizationSelectorOpen"
+                        aria-label="Seleccionar razón social y sede"
+                        @click="toggleOrganizationSelector"
+                        @keydown.down.prevent="openOrganizationSelector"
                     >
-                        <BaseIcon name="building" class="size-4.5" />
-                    </span>
-                    <div class="min-w-0 flex-1">
-                        <p
-                            class="truncate text-xs font-semibold text-slate-900 dark:text-white"
+                        <span
+                            class="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-clinic-700 shadow-sm dark:bg-slate-800 dark:text-clinic-300"
                         >
-                            {{ appName }}
-                        </p>
-                        <p
-                            class="mt-0.5 truncate text-[11px] text-slate-500 dark:text-slate-400"
-                        >
-                            Gestión clínica
-                        </p>
+                            <BaseIcon name="building" class="size-4.5" />
+                        </span>
+                        <span class="min-w-0 flex-1">
+                            <span class="block truncate text-xs font-semibold text-slate-900 dark:text-white">
+                                {{ selectedLegalEntityName }}
+                            </span>
+                            <span class="mt-0.5 block truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                {{ selectedLocationName }}
+                            </span>
+                        </span>
+                        <BaseIcon
+                            name="chevron-down"
+                            class="size-4 shrink-0 text-slate-400 transition-transform"
+                            :class="{ 'rotate-180': organizationSelectorOpen }"
+                        />
+                    </button>
+
+                    <div
+                        v-if="organizationSelectorOpen"
+                        role="listbox"
+                        aria-label="Razones sociales y sedes disponibles"
+                        class="absolute inset-x-0 top-full z-[60] mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-950/15 dark:border-slate-700 dark:bg-slate-900"
+                        @keydown.esc.prevent="closeOrganizationSelector"
+                    >
+                        <div class="relative px-1 pb-1.5">
+                            <BaseIcon
+                                name="search"
+                                class="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-slate-400"
+                            />
+                            <input
+                                ref="organizationSelectorSearchInput"
+                                v-model="organizationSelectorQuery"
+                                type="search"
+                                placeholder="Buscar razón social o sede"
+                                class="min-h-10 w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pr-3 pl-9 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-clinic-600 focus:ring-2 focus:ring-clinic-600/20 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                            />
+                        </div>
+
+                        <div class="max-h-64 overflow-y-auto px-1 pb-1">
+                            <div
+                                v-for="entity in filteredOrganizationEntities"
+                                :key="entity.id"
+                                class="py-1"
+                            >
+                                <p class="px-2 py-1 text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase dark:text-slate-500">
+                                    {{ entity.name }}
+                                </p>
+                                <button
+                                    v-for="location in entity.locations"
+                                    :key="location.id"
+                                    type="button"
+                                    role="option"
+                                    :aria-selected="location.id === selectedLocationId"
+                                    class="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs transition"
+                                    :class="location.id === selectedLocationId
+                                        ? 'bg-clinic-50 font-semibold text-clinic-900 dark:bg-clinic-950/60 dark:text-clinic-100'
+                                        : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800'"
+                                    @click="selectOrganizationLocation(location.id)"
+                                >
+                                    <BaseIcon name="building" class="size-3.5 shrink-0 text-slate-400" />
+                                    <span class="min-w-0 flex-1 truncate">{{ location.name }}</span>
+                                    <BaseIcon
+                                        v-if="location.id === selectedLocationId"
+                                        name="check"
+                                        class="size-3.5 shrink-0 text-clinic-600 dark:text-clinic-300"
+                                    />
+                                </button>
+                            </div>
+
+                            <p
+                                v-if="filteredOrganizationEntities.length === 0"
+                                class="px-2 py-5 text-center text-xs text-slate-500 dark:text-slate-400"
+                            >
+                                No se encontraron razones sociales ni sedes.
+                            </p>
+                        </div>
                     </div>
-                    <BaseIcon
-                        name="chevron-down"
-                        class="size-4 text-slate-400"
-                    />
                 </div>
             </div>
 

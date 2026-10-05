@@ -13,6 +13,15 @@ declare module '@inertiajs/core' {
             auth: {
                 user: AuthenticatedUser | null;
             };
+            organizationContext: {
+                entities: Array<{
+                    id: number;
+                    name: string;
+                    locations: Array<{ id: number; name: string }>;
+                }>;
+                isLocked: boolean;
+                selectedLocationId: number | null;
+            };
             interfaceMode?: boolean;
             [key: string]: unknown;
         };

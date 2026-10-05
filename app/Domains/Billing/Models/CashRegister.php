@@ -17,4 +17,9 @@ class CashRegister extends Model
     {
         return ['opening_amount' => 'decimal:2', 'opened_at' => 'datetime'];
     }
+
+    public function isOpen(): bool
+    {
+        return $this->opened_at !== null;
+    }
 }

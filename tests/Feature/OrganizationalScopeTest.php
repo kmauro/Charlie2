@@ -124,6 +124,25 @@ it('gives superadmins global scope without organizational assignments', function
         ->and(app(UserScopeService::class)->legalEntityIdsFor($superAdmin))->toBeNull();
 });
 
+it('shares the selectable legal entities and locations with the application shell', function () {
+    $user = scopedUser();
+    $legalEntity = LegalEntity::factory()->create(['business_name' => 'Clínica Central']);
+    $firstLocation = Location::factory()->for($legalEntity)->create(['name' => 'Sede Centro']);
+    $secondLocation = Location::factory()->for($legalEntity)->create(['name' => 'Sede Norte']);
+    $user->legalEntities()->attach($legalEntity);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('organizationContext.isLocked', false)
+            ->has('organizationContext.entities', 1)
+            ->where('organizationContext.entities.0.name', 'Clínica Central')
+            ->has('organizationContext.entities.0.locations', 2)
+            ->where('organizationContext.entities.0.locations.0.id', $firstLocation->getKey())
+            ->where('organizationContext.entities.0.locations.1.id', $secondLocation->getKey()));
+});
+
 it('persists multiple organizational assignments when inviting a user', function () {
     Mail::fake();
     $superAdmin = User::factory()->superAdmin()->create();

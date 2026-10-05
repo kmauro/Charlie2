@@ -12,6 +12,7 @@ use App\Domains\Dashboard\Controllers\DashboardController;
 use App\Domains\ExternalClinicalRecords\Controllers\ExternalClinicalRecordController;
 use App\Domains\Organizations\Controllers\LegalEntityController;
 use App\Domains\Organizations\Controllers\OrganizationController;
+use App\Http\Controllers\Domains\Organizations\OrganizationContextController;
 use App\Domains\Patients\Controllers\PatientController;
 use App\Domains\Professionals\Controllers\OperationalAgendaController;
 use App\Domains\Professionals\Controllers\ProfessionalController;
@@ -47,10 +48,13 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::post('/contexto-organizacion', [OrganizationContextController::class, 'store'])
+        ->name('organization-context.store');
 
     Route::controller(BillingController::class)->prefix('facturacion')->name('billing.')->group(function (): void {
         Route::get('/', 'index')->name('index');
         Route::post('/facturas', 'storeInvoice')->name('invoices.store');
+        Route::post('/facturas/{invoice}/anulacion', 'cancelInvoice')->name('invoices.cancel');
         Route::post('/facturas/{invoice}/notas-de-credito', 'storeCreditNote')->name('credit-notes.store');
         Route::post('/cobros', 'storePayment')->name('payments.store');
         Route::post('/facturas/{invoice}/devoluciones', 'storeRefund')->name('refunds.store');

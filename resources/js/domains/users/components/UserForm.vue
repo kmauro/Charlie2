@@ -35,12 +35,29 @@ const initialRoleId =
     props.roles.find((role) => role.code === props.user?.role?.code)?.id ??
     '';
 
+const normalizePermissions = (permissions: unknown): string[] => {
+    if (Array.isArray(permissions)) {
+        return Array.from(
+            new Set(
+                permissions.filter(
+                    (permission): permission is string =>
+                        typeof permission === 'string',
+                ),
+            ),
+        );
+    }
+
+    return typeof permissions === 'string' && permissions !== ''
+        ? [permissions]
+        : [];
+};
+
 const form = useForm<UserFormValues>({
     name: props.user?.name ?? '',
     email: props.user?.email ?? '',
     role_id: initialRoleId,
     expires_in_hours: 48,
-    permissions: props.user?.permissions ?? [],
+    permissions: normalizePermissions(props.user?.permissions),
     legal_entity_ids: props.user?.legal_entity_ids ?? [],
     location_ids: props.user?.location_ids ?? [],
 });
@@ -61,7 +78,27 @@ const submitLabel = computed(() =>
     isEditing.value ? 'Guardar cambios' : 'Enviar invitación',
 );
 
+const isPermissionSelected = (permission: PermissionOption): boolean =>
+    form.permissions.includes(permission.value);
+
+const togglePermission = (permission: PermissionOption, event: Event): void => {
+    const input = event.target;
+
+    if (!(input instanceof HTMLInputElement)) {
+        return;
+    }
+
+    form.permissions = input.checked
+        ? normalizePermissions([...form.permissions, permission.value])
+        : form.permissions.filter((value) => value !== permission.value);
+};
+
 const submit = (): void => {
+    form.transform((data) => ({
+        ...data,
+        permissions: normalizePermissions(data.permissions),
+    }));
+
     if (isEditing.value) {
         form.put(props.endpoint, {
             preserveScroll: true,
@@ -124,6 +161,17 @@ watch(selectedRoleCode, () => {
             </div>
 
             <div class="grid gap-8 p-5 sm:p-6">
+                <div
+                    v-if="form.hasErrors"
+                    class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"
+                    role="alert"
+                >
+                    {{
+                        form.errors ??
+                        'No se pudieron guardar los cambios. Revisá los campos marcados.'
+                    }}
+                </div>
+
                 <fieldset>
                     <legend class="text-sm font-semibold text-slate-950 dark:text-white">
                         Identidad y rol
@@ -265,6 +313,7 @@ watch(selectedRoleCode, () => {
                     <legend class="text-sm font-semibold text-slate-950 dark:text-white">
                         Permisos individuales
                     </legend>
+                    <div v-if="availablePermissionOptions.length != 0" >
                     <p class="pt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
                         El rol define el máximo permitido. Marcá las capacidades
                         que esta cuenta podrá utilizar.
@@ -277,9 +326,12 @@ watch(selectedRoleCode, () => {
                             class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-4 transition hover:border-clinic-300 hover:bg-clinic-50/50 dark:border-slate-700 dark:hover:border-clinic-700 dark:hover:bg-clinic-400/5"
                         >
                             <input
-                                v-model="form.permissions"
+                                :id="`user-permission-${permission.value}`"
+                                :name="'permissions[]'"
                                 type="checkbox"
+                                :checked="isPermissionSelected(permission)"
                                 :value="permission.value"
+                                @change="togglePermission(permission, $event)"
                                 class="mt-0.5 size-4 rounded border-slate-300 text-clinic-600 accent-clinic-600 focus:ring-2 focus:ring-clinic-600 focus:ring-offset-2 dark:border-slate-600 dark:bg-slate-950 dark:focus:ring-offset-slate-900"
                             />
                             <span>
@@ -297,8 +349,9 @@ watch(selectedRoleCode, () => {
                             </span>
                         </label>
                     </div>
+                    </div>
                     <p
-                        v-if="availablePermissionOptions.length === 0"
+                        v-else
                         class="pt-4 text-sm text-slate-500 dark:text-slate-400"
                     >
                         El rol seleccionado no admite permisos individuales.
