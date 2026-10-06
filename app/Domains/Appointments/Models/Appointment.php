@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Attributes\UsePolicy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use LogicException;
 
 #[UsePolicy(AppointmentPolicy::class)]
@@ -91,6 +92,12 @@ class Appointment extends Model
     public function series(): BelongsTo
     {
         return $this->belongsTo(AppointmentSeries::class, 'appointment_series_id');
+    }
+
+    /** @return HasMany<AppointmentReminderDelivery, $this> */
+    public function reminderDeliveries(): HasMany
+    {
+        return $this->hasMany(AppointmentReminderDelivery::class);
     }
 
     protected static function newFactory(): AppointmentFactory

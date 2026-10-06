@@ -23,6 +23,7 @@ class PatientPortalController extends Controller
     {
         $actor = $this->patientUser($request);
         $patient = $this->patientFor($actor);
+        $preference = $patient->notificationPreference()->first();
 
         return Inertia::render('patients/views/Portal', [
             'patient' => [
@@ -33,6 +34,11 @@ class PatientPortalController extends Controller
                 'address' => $patient->address,
                 'coverage_name' => $patient->coverage_name,
                 'member_number' => $patient->member_number,
+                'notification_preferences' => [
+                    'appointment_reminders_by_email' => $preference?->appointment_reminders_by_email ?? true,
+                    'appointment_reminders_by_whatsapp' => $preference?->appointment_reminders_by_whatsapp ?? false,
+                    'appointment_reminder_hours' => $preference?->appointment_reminder_hours ?? 24,
+                ],
             ],
             'upcomingAppointments' => Appointment::query()
                 ->whereBelongsTo($patient)

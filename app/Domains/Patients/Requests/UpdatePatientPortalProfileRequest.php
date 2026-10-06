@@ -37,6 +37,9 @@ class UpdatePatientPortalProfileRequest extends FormRequest
                 Rule::unique((new User)->getTable(), 'email')->ignore($this->user()?->getKey()),
             ],
             'address' => ['nullable', 'string', 'max:1000'],
+            'appointment_reminders_by_email' => ['sometimes', 'boolean'],
+            'appointment_reminders_by_whatsapp' => ['sometimes', 'boolean'],
+            'appointment_reminder_hours' => ['sometimes', 'integer', 'in:12,24,48'],
         ];
     }
 

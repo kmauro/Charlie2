@@ -248,7 +248,7 @@ class PatientService
         }, 3);
     }
 
-    /** @param array{phone?: string|null, email: string, address?: string|null} $data */
+    /** @param array{phone?: string|null, email: string, address?: string|null, appointment_reminders_by_email?: bool, appointment_reminders_by_whatsapp?: bool, appointment_reminder_hours?: int} $data */
     public function updatePortalProfile(
         Patient $patient,
         array $data,
@@ -274,6 +274,11 @@ class PatientService
             $this->users->updatePatientIdentity($actor, [
                 'name' => trim($lockedPatient->first_name.' '.$lockedPatient->last_name),
                 'email' => $lockedPatient->email,
+            ]);
+            $lockedPatient->notificationPreference()->updateOrCreate([], [
+                'appointment_reminders_by_email' => (bool) ($data['appointment_reminders_by_email'] ?? true),
+                'appointment_reminders_by_whatsapp' => (bool) ($data['appointment_reminders_by_whatsapp'] ?? false),
+                'appointment_reminder_hours' => (int) ($data['appointment_reminder_hours'] ?? 24),
             ]);
             $updatedPatient = $this->patients->findOrFail((int) $lockedPatient->getKey());
 
