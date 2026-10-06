@@ -301,6 +301,13 @@ No se utilizará el estado `en atención`.
 
 ## 11. Facturación, pagos y contabilidad
 
+### Estado actual
+
+- Implementado un MVP administrativo por razón social y sede: facturas, anticipos, conceptos con impuestos, pagadores paciente/cobertura/mixto, cuotas, cobros parciales o totales, caja por sede, arqueos y asientos automáticos.
+- Las notas de crédito están limitadas al saldo aún no acreditado; las devoluciones requieren solicitud, autorización de Gerencia o Superadministración y registro posterior.
+- Las anulaciones de comprobantes sin cobros generan su asiento inverso; los importes de una devolución registrada ajustan el saldo cobrado.
+- Pendiente la emisión electrónica con ARCA, conciliación bancaria, administración de medios de pago, informes de período y definición fiscal definitiva.
+
 - El sistema se preparará para una futura integración con ARCA.
 - La responsabilidad de pago puede corresponder al paciente, su cobertura o ambos.
 - Moneda inicial: pesos argentinos.
@@ -535,11 +542,11 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 2. Usuarios y permisos configurables: implementados y aplicados en las policies; autenticación multifactor pendiente.
 3. Profesionales: implementado el núcleo y la agenda avanzada con descansos, feriados por sede, licencias, excepciones por fecha, catálogo operativo de consultorios y asignación fija, manual o automática.
 4. Pacientes y responsables: gestión administrativa y acceso externo básico implementados; vinculación federada o contextual con la webapp externa pendiente.
-5. Turnos: núcleo implementado; sobreturnos, lista de espera, bloqueos, recurrencia y autogestión pendientes.
+5. Turnos: núcleo, recurrencia, bloques de agenda y lista de espera implementados; sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos pendientes.
 6. Integración clínica externa: parcialmente implementada; el módulo interno fue retirado y existe un enlace HTTPS autorizado y auditado. Quedan pendientes la URL productiva y el contrato de autenticación/contexto con el proveedor.
 7. Guardia e internación operativas: pendiente; la documentación clínica permanecerá en la webapp externa.
 8. Enfermería operativa: pendiente; medicación e información clínica permanecerán en la webapp externa.
-9. Facturación, pagos y cajas: pendiente.
+9. Facturación, pagos, cajas y contabilidad: MVP implementado con facturas, anticipos, cobros, cierres, notas de crédito, devoluciones y asientos automáticos; pendientes ARCA, conciliación, administración de medios de pago e informes de período.
 10. Planes de prestaciones: pendiente.
 11. Notificaciones administrativas externas: pendiente.
 12. Auditoría avanzada: consulta, filtros, exportación, retención anual y aviso por correo implementados; monitoreo e interoperabilidad continúan pendientes.
@@ -551,7 +558,8 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 2. Reemplazar la URL de demostración por la URL productiva y validar el flujo de extremo a extremo.
 3. Implementar el mecanismo federado o temporal acordado sin exponer datos sensibles en la URL.
 4. Completar la prueba integral Docker de cola, scheduler, Mailpit y persistencia tras reinicios.
-5. Priorizar autenticación multifactor y evolución de turnos antes de iniciar los módulos operativos y contables posteriores.
+5. Completar responsables de pago, menores/tutores y autogestión del paciente antes de planes de prestaciones y cobros recurrentes.
+6. Evolucionar facturación con conciliación, informes de período y la integración ARCA una vez definidas las reglas fiscales.
 
 ## 18. Decisiones de acceso confirmadas
 

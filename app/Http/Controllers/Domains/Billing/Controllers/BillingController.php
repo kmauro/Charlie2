@@ -9,6 +9,13 @@ use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\JournalEntry;
 use App\Domains\Billing\Models\PaymentMethod;
 use App\Domains\Billing\Models\Refund;
+use App\Domains\Billing\Requests\CancelInvoiceRequest;
+use App\Domains\Billing\Requests\CloseCashRegisterRequest;
+use App\Domains\Billing\Requests\IssueCreditNoteRequest;
+use App\Domains\Billing\Requests\OpenCashRegisterRequest;
+use App\Domains\Billing\Requests\StoreInvoiceRequest;
+use App\Domains\Billing\Requests\StorePaymentRequest;
+use App\Domains\Billing\Requests\StoreRefundRequest;
 use App\Domains\Billing\Services\BillingService;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
@@ -64,6 +71,12 @@ class BillingController extends Controller
                 ->latest('closed_at')
                 ->limit(20)
                 ->get(),
+            'refunds' => Refund::query()
+                ->whereHas('invoice', fn ($query) => $query->whereIn('location_id', $locationIds))
+                ->with('invoice:id,number')
+                ->latest()
+                ->limit(20)
+                ->get(),
             'journalEntries' => Gate::forUser($actor)->allows('billing-accounting')
                 ? JournalEntry::query()->whereIn('legal_entity_id', $legalEntityIds)->with(['lines.account'])->latest('entry_date')->limit(50)->get()
                 : [],
@@ -88,79 +101,69 @@ class BillingController extends Controller
         ]);
     }
 
-    public function storeInvoice(Request $request): RedirectResponse
+    public function storeInvoice(StoreInvoiceRequest $request): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-invoice');
-        $data = $request->validate(['location_id' => ['required', 'integer', 'exists:locations,id'], 'patient_id' => ['nullable', 'integer', 'exists:patients,id'], 'payer_type' => ['required', 'in:patient,coverage,mixed'], 'coverage_name' => ['nullable', 'string', 'max:120', 'required_if:payer_type,coverage,mixed'], 'coverage_amount' => ['nullable', 'numeric', 'gte:0'], 'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'], 'type' => ['required', 'in:invoice,advance'], 'items' => ['required', 'array', 'min:1'], 'items.*.description' => ['required', 'string', 'max:255'], 'items.*.quantity' => ['required', 'numeric', 'gt:0'], 'items.*.unit_price' => ['required', 'numeric', 'gte:0'], 'items.*.tax_rate' => ['nullable', 'numeric', 'between:0,100'], 'installments' => ['nullable', 'array'], 'installments.*.amount' => ['required', 'numeric', 'gt:0'], 'installments.*.due_date' => ['required', 'date']]);
+        $data = $request->validated();
         $this->ensureLocation((int) $data['location_id'], $actor);
         $this->billing->issueInvoice($data, $actor);
 
         return back()->with('success', 'La factura fue emitida y contabilizada.');
     }
 
-    public function cancelInvoice(Request $request, Invoice $invoice): RedirectResponse
+    public function cancelInvoice(CancelInvoiceRequest $request, Invoice $invoice): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-full');
         $this->ensureLocation((int) $invoice->location_id, $actor);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
-        $this->billing->cancelInvoice($invoice, $data['reason'], $actor);
+        $this->billing->cancelInvoice($invoice, $request->validated('reason'), $actor);
 
         return back()->with('success', 'El comprobante fue anulado.');
     }
 
-    public function storePayment(Request $request): RedirectResponse
+    public function storePayment(StorePaymentRequest $request): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-payment');
-        $data = $request->validate(['invoice_id' => ['required', 'integer', 'exists:invoices,id'], 'payment_method_id' => ['required', 'integer', 'exists:payment_methods,id'], 'amount' => ['required', 'numeric', 'gt:0'], 'reference' => ['nullable', 'string', 'max:120']]);
+        $data = $request->validated();
         $this->ensureLocation((int) Invoice::query()->findOrFail($data['invoice_id'])->location_id, $actor);
         $this->billing->recordPayment($data, $actor);
 
         return back()->with('success', 'El cobro fue registrado y contabilizado.');
     }
 
-    public function storeCreditNote(Request $request, Invoice $invoice): RedirectResponse
+    public function storeCreditNote(IssueCreditNoteRequest $request, Invoice $invoice): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-full');
         $this->ensureLocation((int) $invoice->location_id, $actor);
-        $data = $request->validate(['amount' => ['required', 'numeric', 'gt:0'], 'reason' => ['required', 'string', 'max:500']]);
+        $data = $request->validated();
         $this->billing->issueCreditNote($invoice, (float) $data['amount'], $data['reason'], $actor);
 
         return back()->with('success', 'La nota de crédito fue emitida y contabilizada.');
     }
 
-    public function storeRefund(Request $request, Invoice $invoice): RedirectResponse
+    public function storeRefund(StoreRefundRequest $request, Invoice $invoice): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-full');
         $this->ensureLocation((int) $invoice->location_id, $actor);
-        $data = $request->validate(['amount' => ['required', 'numeric', 'gt:0'], 'reason' => ['required', 'string', 'max:500']]);
+        $data = $request->validated();
         $this->billing->requestRefund($invoice, (float) $data['amount'], $data['reason'], $actor);
 
         return back()->with('success', 'La devolución quedó pendiente de autorización.');
     }
 
-    public function openCashRegister(Request $request, Location $location): RedirectResponse
+    public function openCashRegister(OpenCashRegisterRequest $request, Location $location): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-cash');
         $this->ensureLocation((int) $location->getKey(), $actor);
-        $data = $request->validate(['opening_amount' => ['required', 'numeric', 'gte:0']]);
-        $this->billing->openCashRegister($location, (float) $data['opening_amount'], $actor);
+        $this->billing->openCashRegister($location, (float) $request->validated('opening_amount'), $actor);
 
         return back()->with('success', 'La caja fue abierta.');
     }
 
-    public function closeCashRegister(Request $request, Location $location): RedirectResponse
+    public function closeCashRegister(CloseCashRegisterRequest $request, Location $location): RedirectResponse
     {
         $actor = $this->actor($request);
-        Gate::forUser($actor)->authorize('billing-cash');
         $this->ensureLocation((int) $location->getKey(), $actor);
-        $data = $request->validate(['counted_amount' => ['required', 'numeric', 'gte:0']]);
-        $this->billing->closeCashRegister($location, (float) $data['counted_amount'], $actor);
+        $this->billing->closeCashRegister($location, (float) $request->validated('counted_amount'), $actor);
 
         return back()->with('success', 'El arqueo y cierre fueron registrados.');
     }

@@ -1,6 +1,6 @@
 # Traspaso del proyecto Charlie2
 
-[Cierta] Fecha de revisión: **24 de septiembre de 2026**. La evidencia técnica proviene del repositorio y de los comandos indicados en este documento. El build Docker, las migraciones y el login en contenedores fueron validados funcionalmente por la persona responsable del proyecto.
+[Cierta] Fecha de revisión: **5 de octubre de 2026**. La evidencia técnica proviene del repositorio y de los comandos indicados en este documento. El build Docker, las migraciones y el login en contenedores fueron validados funcionalmente por la persona responsable del proyecto.
 
 ## Qué recibe la persona entrante
 
@@ -14,15 +14,16 @@
 | --- | --- | --- |
 | Autenticación | Login/logout, validación de cuenta activa, invitaciones firmadas de uso único y recuperación de contraseña | Autenticación multifactor pendiente |
 | Usuarios | Roles, permisos individuales efectivos, invitaciones, suspensión/restauración, protección del último superadministrador y alcance por múltiples sedes y razones sociales | No existen flujos de administración delegada fuera del superadministrador |
-| Profesionales | Perfil, matrícula/especialidad, duración, agenda por sede, cuenta vinculada y estado | Descansos, feriados, licencias, excepciones y consultorios operativos pendientes |
+| Profesionales | Perfil, matrícula/especialidad, duración, agenda por sede, cuenta vinculada y agenda operativa con descansos, feriados, licencias, excepciones y consultorios | Los criterios operativos finales quedan sujetos a la configuración de cada institución |
 | Pacientes | Identidad administrativa, cobertura/contactos, invitación, archivo/restauración, concurrencia y acceso de portal durante dos meses después del archivo | Menores, tutores, responsables de pago y autogestión completa pendientes |
 | Organización | Razones sociales y sedes, validación, archivo/restauración y alcance de usuarios | No implica contabilidad separada implementada |
-| Turnos | Altas, reprogramación, estados, cancelación, superposiciones, concurrencia y alcance organizacional | Sobreturnos, recurrencia, bloqueos, lista de espera y autogestión pendientes |
+| Turnos | Altas, reprogramación, estados, cancelación, superposiciones, concurrencia, alcance organizacional, recurrencia, bloqueos y lista de espera | Sobreturnos, autogestión del paciente, turnos virtuales, de guardia y procedimientos pendientes |
 | Dashboard | Métricas operativas consultadas desde la base y contrato de prueba estabilizado | Su evolución dependerá de nuevos módulos operativos |
 | Acceso clínico externo | Permiso por rol/usuario, relación asistencial temporal, alcance por sede para encargados, redirección HTTPS y auditoría | Sin SSO, token temporal ni contexto opaco del paciente; contrato productivo pendiente |
 | Auditoría | Registro append-only por Eloquent, eventos estabilizados, filtros, interfaz, exportación exclusiva del auditor y retención anual con aviso por correo | Escrituras SQL directas quedan fuera de la protección del modelo; monitoreo avanzado pendiente |
 | Guardia, internación y enfermería | Roles y definiciones de alcance | Circuitos operativos completos pendientes |
-| Facturación, cobros, cajas, contabilidad y planes | Requisitos definidos en el plan | Módulos pendientes |
+| Facturación, cobros, cajas y contabilidad | MVP operativo: facturas, anticipos, cobros parciales/totales, caja por sede, cierres, notas de crédito, devoluciones con autorización separada y asientos automáticos | Sin emisión electrónica ARCA, conciliación bancaria, administración de medios de pago ni reportes contables de cierre |
+| Planes de prestaciones | Requisitos definidos en el plan | Módulo pendiente |
 | Notificaciones | Invitaciones, recuperación de contraseña y aviso de retención de auditoría | Recordatorios de turnos, WhatsApp y seguimiento de entrega pendientes |
 
 ## Arquitectura vigente
@@ -115,8 +116,8 @@ docker compose down
 | 2 | Implementar la integración segura acordada | Flujo extremo a extremo sin DNI, secretos ni identificadores sensibles en la URL |
 | 3 | Completar aceptación Docker | Worker, scheduler, Mailpit y persistencia verificados con evidencia |
 | 4 | Incorporar autenticación multifactor | Alta, recuperación y revocación cubiertas por pruebas |
-| 5 | Completar agenda y turnos avanzados | Descansos, excepciones, consultorios, bloqueos, recurrencia y lista de espera priorizados con producto |
-| 6 | Evolucionar módulos posteriores | Guardia, internación, enfermería, facturación, cajas, contabilidad, planes y notificaciones con criterios de aceptación previos |
+| 5 | Completar el ciclo administrativo del paciente y de turnos | Responsables de pago, menores/tutores, autogestión y tipos operativos de turno definidos y cubiertos por pruebas |
+| 6 | Consolidar facturación e incorporar módulos posteriores | Conciliación, ARCA, planes, notificaciones y los circuitos de guardia, internación y enfermería con criterios de aceptación previos |
 
 ## Información externa aún necesaria
 

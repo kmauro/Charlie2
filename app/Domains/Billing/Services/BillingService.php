@@ -30,15 +30,14 @@ class BillingService
         return DB::transaction(function () use ($data, $actor): Invoice {
             $location = Location::query()->lockForUpdate()->findOrFail($data['location_id']);
             $this->setup->initializeFor(LegalEntity::query()->findOrFail($location->legal_entity_id));
-            $netAmount = 0.0;
-            $taxAmount = 0.0;
+            $items = array_map(function (array $item): array {
+                $netAmount = round((float) $item['quantity'] * (float) $item['unit_price'], 2);
+                $taxAmount = round($netAmount * ((float) ($item['tax_rate'] ?? 0) / 100), 2);
 
-            foreach ($data['items'] as $item) {
-                $lineNet = (float) $item['quantity'] * (float) $item['unit_price'];
-                $netAmount += $lineNet;
-                $taxAmount += $lineNet * ((float) ($item['tax_rate'] ?? 0) / 100);
-            }
-
+                return [...$item, 'net_amount' => $netAmount, 'tax_amount' => $taxAmount];
+            }, $data['items']);
+            $netAmount = round(array_sum(array_column($items, 'net_amount')), 2);
+            $taxAmount = round(array_sum(array_column($items, 'tax_amount')), 2);
             $totalAmount = round($netAmount + $taxAmount, 2);
             $coverageAmount = round((float) ($data['coverage_amount'] ?? 0), 2);
 
@@ -53,6 +52,13 @@ class BillingService
                     'coverage_amount' => 'La cobertura debe asumir una parte del total.',
                 ]);
             }
+
+            if (isset($data['installments']) && round(array_sum(array_column($data['installments'], 'amount')), 2) !== $totalAmount) {
+                throw ValidationException::withMessages([
+                    'installments' => 'La suma de las cuotas debe coincidir con el total del comprobante.',
+                ]);
+            }
+
             $invoice = Invoice::create([
                 'legal_entity_id' => $location->legal_entity_id,
                 'location_id' => $location->getKey(),
@@ -72,15 +78,14 @@ class BillingService
                 'issued_at' => now(),
             ]);
 
-            foreach ($data['items'] as $item) {
-                $lineNet = round((float) $item['quantity'] * (float) $item['unit_price'], 2);
+            foreach ($items as $item) {
                 InvoiceItem::create([
                     'invoice_id' => $invoice->getKey(),
                     'description' => $item['description'],
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
                     'tax_rate' => $item['tax_rate'] ?? 0,
-                    'total_amount' => round($lineNet * (1 + ((float) ($item['tax_rate'] ?? 0) / 100)), 2),
+                    'total_amount' => $item['net_amount'] + $item['tax_amount'],
                 ]);
             }
 
@@ -106,7 +111,13 @@ class BillingService
     {
         return DB::transaction(function () use ($invoice, $amount, $reason, $actor): Invoice {
             $original = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
-            if ($original->type !== 'invoice' || $amount <= 0 || $amount > (float) $original->total_amount) {
+            $creditedAmount = (float) Invoice::query()
+                ->where('original_invoice_id', $original->getKey())
+                ->where('type', 'credit_note')
+                ->lockForUpdate()
+                ->sum('total_amount');
+
+            if ($original->status === 'canceled' || $original->type !== 'invoice' || $amount <= 0 || $amount > (float) $original->total_amount - $creditedAmount) {
                 throw ValidationException::withMessages(['amount' => 'La nota de crédito debe referir a una factura y no superar su total.']);
             }
             $creditNote = Invoice::create([
@@ -126,11 +137,20 @@ class BillingService
 
     public function requestRefund(Invoice $invoice, float $amount, string $reason, User $actor): Refund
     {
-        if ($amount <= 0 || $amount > (float) $invoice->paid_amount) {
-            throw ValidationException::withMessages(['amount' => 'La devolución no puede superar lo efectivamente cobrado.']);
-        }
+        return DB::transaction(function () use ($invoice, $amount, $reason, $actor): Refund {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
+            $committedRefundAmount = (float) Refund::query()
+                ->where('invoice_id', $invoice->getKey())
+                ->whereIn('status', ['pending', 'authorized', 'registered'])
+                ->lockForUpdate()
+                ->sum('amount');
 
-        return Refund::create(['invoice_id' => $invoice->getKey(), 'requested_by' => $actor->getKey(), 'amount' => $amount, 'reason' => $reason, 'status' => 'pending']);
+            if ($invoice->status === 'canceled' || $amount <= 0 || $amount > (float) $invoice->paid_amount - $committedRefundAmount) {
+                throw ValidationException::withMessages(['amount' => 'La devolución no puede superar lo efectivamente cobrado.']);
+            }
+
+            return Refund::create(['invoice_id' => $invoice->getKey(), 'requested_by' => $actor->getKey(), 'amount' => $amount, 'reason' => $reason, 'status' => 'pending']);
+        }, 3);
     }
 
     public function cancelInvoice(Invoice $invoice, string $reason, User $actor): Invoice
@@ -151,6 +171,8 @@ class BillingService
                 'cancellation_reason' => $reason,
             ]);
 
+            $this->postCancellationEntry($invoice, $actor);
+
             return $invoice->refresh();
         }, 3);
     }
@@ -164,7 +186,7 @@ class BillingService
             $remaining = (float) $invoice->total_amount - (float) $invoice->paid_amount;
             $amount = (float) $data['amount'];
 
-            if ($method->legal_entity_id !== $invoice->legal_entity_id || $amount <= 0 || $amount > $remaining) {
+            if ($invoice->status === 'canceled' || $method->legal_entity_id !== $invoice->legal_entity_id || $amount <= 0 || $amount > $remaining) {
                 throw ValidationException::withMessages(['amount' => 'El cobro debe corresponder a la factura y no superar su saldo.']);
             }
             if ($method->requires_reference && blank($data['reference'] ?? null)) {
@@ -236,24 +258,40 @@ class BillingService
         if (! in_array($actor->role?->code, [RoleCode::SuperAdmin, RoleCode::Manager], true)) {
             throw ValidationException::withMessages(['authorization' => 'La devolución requiere autorización de Gerencia o Superadministración.']);
         }
-        $refund->update(['authorized_by' => $actor->getKey(), 'authorized_at' => now(), 'status' => 'authorized']);
 
-        return $refund->refresh();
+        return DB::transaction(function () use ($refund, $actor): Refund {
+            $refund = Refund::query()->lockForUpdate()->findOrFail($refund->getKey());
+            if ($refund->status !== 'pending') {
+                throw ValidationException::withMessages(['refund' => 'Sólo se pueden autorizar devoluciones pendientes.']);
+            }
+
+            $refund->update(['authorized_by' => $actor->getKey(), 'authorized_at' => now(), 'status' => 'authorized']);
+
+            return $refund->refresh();
+        }, 3);
     }
 
     public function registerRefund(Refund $refund, User $actor): Refund
     {
-        if ($refund->status !== 'authorized') {
-            throw ValidationException::withMessages(['refund' => 'La devolución debe estar autorizada antes de registrarse.']);
-        }
-        $refund->update(['registered_by' => $actor->getKey(), 'registered_at' => now(), 'status' => 'registered']);
-        $invoice = Invoice::query()->findOrFail($refund->invoice_id);
-        $this->postEntry($refund, $actor, 'Devolución externa '.$invoice->number, [
-            ['code' => '5.1.01', 'debit' => $refund->amount, 'credit' => 0],
-            ['code' => '1.1.02', 'debit' => 0, 'credit' => $refund->amount],
-        ], (int) $invoice->legal_entity_id);
+        return DB::transaction(function () use ($refund, $actor): Refund {
+            $refund = Refund::query()->lockForUpdate()->findOrFail($refund->getKey());
+            if ($refund->status !== 'authorized') {
+                throw ValidationException::withMessages(['refund' => 'La devolución debe estar autorizada antes de registrarse.']);
+            }
 
-        return $refund->refresh();
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($refund->invoice_id);
+            $refund->update(['registered_by' => $actor->getKey(), 'registered_at' => now(), 'status' => 'registered']);
+            $invoice->update([
+                'paid_amount' => max(0, round((float) $invoice->paid_amount - (float) $refund->amount, 2)),
+                'status' => 'issued',
+            ]);
+            $this->postEntry($refund, $actor, 'Devolución externa '.$invoice->number, [
+                ['code' => '5.1.01', 'debit' => $refund->amount, 'credit' => 0],
+                ['code' => '1.1.02', 'debit' => 0, 'credit' => $refund->amount],
+            ], (int) $invoice->legal_entity_id);
+
+            return $refund->refresh();
+        }, 3);
     }
 
     /** @param array<int, array{code: string, debit: numeric, credit: numeric}> $lines */
@@ -278,8 +316,28 @@ class BillingService
 
     private function nextNumber(int $legalEntityId, string $type): string
     {
+        LegalEntity::query()->lockForUpdate()->findOrFail($legalEntityId);
         $sequence = Invoice::query()->where('legal_entity_id', $legalEntityId)->where('type', $type)->lockForUpdate()->count() + 1;
 
         return strtoupper($type).'-'.str_pad((string) $sequence, 8, '0', STR_PAD_LEFT);
+    }
+
+    private function postCancellationEntry(Invoice $invoice, User $actor): void
+    {
+        if ($invoice->type === 'credit_note') {
+            $this->postEntry($invoice, $actor, 'Anulación '.$invoice->number, [
+                ['code' => '1.1.03', 'debit' => $invoice->total_amount, 'credit' => 0],
+                ['code' => '4.1.01', 'debit' => 0, 'credit' => $invoice->net_amount],
+                ['code' => '2.1.01', 'debit' => 0, 'credit' => $invoice->tax_amount],
+            ]);
+
+            return;
+        }
+
+        $this->postEntry($invoice, $actor, 'Anulación '.$invoice->number, [
+            ['code' => '4.1.01', 'debit' => $invoice->net_amount, 'credit' => 0],
+            ['code' => '2.1.01', 'debit' => $invoice->tax_amount, 'credit' => 0],
+            ['code' => '1.1.03', 'debit' => 0, 'credit' => $invoice->total_amount],
+        ]);
     }
 }

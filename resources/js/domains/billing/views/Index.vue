@@ -13,6 +13,7 @@ type CashRegister = { id: number; location_id: number; opening_amount: string; o
 type CashClosure = { id: number; opening_amount: string; expected_amount: string; counted_amount: string; difference_amount: string; closed_at: string };
 type JournalEntry = { id: number; entry_date: string; description: string; lines: Array<{ id: number; debit: string; credit: string; account: { code: string; name: string } }> };
 type AccountBalance = { id: number; code: string; name: string; debits: string; credits: string };
+type Refund = { id: number; amount: string; reason: string; status: string; invoice: { number: string } };
 
 const props = defineProps<{
     invoices: Invoice[];
@@ -21,6 +22,7 @@ const props = defineProps<{
     patients: Patient[];
     paymentMethods: PaymentMethod[];
     cashClosures: CashClosure[];
+    refunds: Refund[];
     journalEntries: JournalEntry[];
     accountBalances: AccountBalance[];
     permissions: { canManageAccounting: boolean; canIssueInvoices: boolean; canRecordPayments: boolean; canOperateCash: boolean; canCancelInvoices: boolean };
@@ -31,10 +33,14 @@ const invoicePanelOpen = ref(false);
 const paymentPanelOpen = ref(false);
 const cashPanelOpen = ref(false);
 const cancelTarget = ref<Invoice | null>(null);
+const adjustmentTarget = ref<Invoice | null>(null);
+const adjustmentType = ref<'credit-note' | 'refund'>('credit-note');
 const invoiceForm = useForm({ location_id: props.locations[0]?.id ?? '', patient_id: '', payer_type: 'patient', coverage_name: '', coverage_amount: 0, type: 'invoice', items: [{ description: '', quantity: 1, unit_price: 0, tax_rate: 0 }] });
 const paymentForm = useForm({ invoice_id: '', payment_method_id: '', amount: 0, reference: '' });
 const cashForm = useForm({ location_id: props.locations[0]?.id ?? '', opening_amount: 0, counted_amount: 0 });
 const cancelForm = useForm({ reason: '' });
+const adjustmentForm = useForm({ amount: 0, reason: '' });
+const refundActionForm = useForm({});
 
 const currency = (amount: string | number): string => new Intl.NumberFormat('es-AR', {
     style: 'currency', currency: 'ARS',
@@ -53,6 +59,22 @@ const submitInvoice = (): void => invoiceForm.post('/facturacion/facturas', { pr
 const submitPayment = (): void => paymentForm.post('/facturacion/cobros', { preserveScroll: true, onSuccess: () => { paymentPanelOpen.value = false; paymentForm.reset(); } });
 const submitCash = (): void => { const action = selectedCashRegister.value?.opened_at ? 'cierre' : 'apertura'; cashForm.post(`/facturacion/cajas/${cashForm.location_id}/${action}`, { preserveScroll: true, onSuccess: () => { cashPanelOpen.value = false; cashForm.reset(); } }); };
 const submitCancellation = (): void => { if (cancelTarget.value) cancelForm.post(`/facturacion/facturas/${cancelTarget.value.id}/anulacion`, { preserveScroll: true, onSuccess: () => { cancelTarget.value = null; cancelForm.reset(); } }); };
+const openAdjustment = (invoice: Invoice, type: 'credit-note' | 'refund'): void => {
+    adjustmentTarget.value = invoice;
+    adjustmentType.value = type;
+    adjustmentForm.reset();
+    adjustmentForm.amount = type === 'refund' ? Number(invoice.paid_amount) : Number(invoice.total_amount);
+};
+const submitAdjustment = (): void => {
+    if (!adjustmentTarget.value) return;
+
+    const endpoint = adjustmentType.value === 'credit-note'
+        ? `/facturacion/facturas/${adjustmentTarget.value.id}/notas-de-credito`
+        : `/facturacion/facturas/${adjustmentTarget.value.id}/devoluciones`;
+    adjustmentForm.post(endpoint, { preserveScroll: true, onSuccess: () => { adjustmentTarget.value = null; adjustmentForm.reset(); } });
+};
+const authorizeRefund = (refund: Refund): void => refundActionForm.post(`/facturacion/devoluciones/${refund.id}/autorizar`, { preserveScroll: true });
+const registerRefund = (refund: Refund): void => refundActionForm.post(`/facturacion/devoluciones/${refund.id}/registrar`, { preserveScroll: true });
 
 watch(() => invoiceForm.payer_type, (payerType) => { if (payerType === 'coverage') invoiceForm.coverage_amount = invoiceTotal.value; if (payerType === 'patient') { invoiceForm.coverage_amount = 0; invoiceForm.coverage_name = ''; } });
 watch(invoiceTotal, (total) => { if (invoiceForm.payer_type === 'coverage') invoiceForm.coverage_amount = total; });
@@ -114,14 +136,16 @@ watch(invoiceTotal, (total) => { if (invoiceForm.payer_type === 'coverage') invo
                 <table class="w-full min-w-175 text-left text-sm">
                     <thead class="bg-slate-50 text-xs tracking-wide text-slate-500 uppercase dark:bg-slate-950/50 dark:text-slate-400"><tr><th class="px-5 py-3">Número</th><th class="px-5 py-3">Tipo</th><th class="px-5 py-3">Estado</th><th class="px-5 py-3 text-right">Total</th><th class="px-5 py-3 text-right">Cobrado</th></tr></thead>
                     <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
-                        <tr v-for="invoice in invoices" :key="invoice.id"><td class="px-5 py-4 font-mono font-medium text-slate-950 dark:text-white">{{ invoice.number }}<button v-if="permissions.canManageAccounting && invoice.status !== 'canceled' && Number(invoice.paid_amount) === 0" type="button" class="mt-1 block text-xs font-sans font-semibold text-rose-600 hover:underline" @click="cancelTarget = invoice">Anular</button></td><td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ invoice.type === 'credit_note' ? 'Nota de crédito' : invoice.type === 'advance' ? 'Anticipo' : 'Factura' }}<span class="block text-xs text-slate-500">{{ payerLabel(invoice.payer_type) }}{{ invoice.coverage_name ? ` · ${invoice.coverage_name}` : '' }}</span></td><td class="px-5 py-4"><span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td><td class="px-5 py-4 text-right font-medium text-slate-950 dark:text-white">{{ currency(invoice.total_amount) }}</td><td class="px-5 py-4 text-right text-slate-600 dark:text-slate-300">{{ currency(invoice.paid_amount) }}</td></tr>
+                        <tr v-for="invoice in invoices" :key="invoice.id"><td class="px-5 py-4 font-mono font-medium text-slate-950 dark:text-white">{{ invoice.number }}<div v-if="permissions.canCancelInvoices && invoice.status !== 'canceled'" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-sans text-xs font-semibold"><button v-if="invoice.type === 'invoice'" type="button" class="text-clinic-700 hover:underline dark:text-clinic-300" @click="openAdjustment(invoice, 'credit-note')">Nota de crédito</button><button v-if="Number(invoice.paid_amount) > 0" type="button" class="text-amber-700 hover:underline dark:text-amber-300" @click="openAdjustment(invoice, 'refund')">Devolver</button><button v-if="Number(invoice.paid_amount) === 0" type="button" class="text-rose-600 hover:underline" @click="cancelTarget = invoice">Anular</button></div></td><td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ invoice.type === 'credit_note' ? 'Nota de crédito' : invoice.type === 'advance' ? 'Anticipo' : 'Factura' }}<span class="block text-xs text-slate-500">{{ payerLabel(invoice.payer_type) }}{{ invoice.coverage_name ? ` · ${invoice.coverage_name}` : '' }}</span></td><td class="px-5 py-4"><span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td><td class="px-5 py-4 text-right font-medium text-slate-950 dark:text-white">{{ currency(invoice.total_amount) }}</td><td class="px-5 py-4 text-right text-slate-600 dark:text-slate-300">{{ currency(invoice.paid_amount) }}</td></tr>
                         <tr v-if="!invoices.length"><td colspan="5" class="px-5 py-10 text-center text-slate-500 dark:text-slate-400">Todavía no hay comprobantes emitidos.</td></tr>
                     </tbody>
                 </table>
             </div>
         </section>
+        <section v-if="permissions.canCancelInvoices && refunds.length" class="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"><div class="border-b border-slate-200 p-5 dark:border-slate-800"><h2 class="font-semibold text-slate-950 dark:text-white">Devoluciones</h2><p class="mt-1 text-sm text-slate-500 dark:text-slate-400">La autorización y el registro quedan separados para conservar el control operativo.</p></div><div class="divide-y divide-slate-100 dark:divide-slate-800"><div v-for="refund in refunds" :key="refund.id" class="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><p class="font-mono text-sm font-semibold text-slate-950 dark:text-white">{{ refund.invoice.number }} · {{ currency(refund.amount) }}</p><p class="mt-1 text-sm text-slate-600 dark:text-slate-300">{{ refund.reason }}</p><p class="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">{{ refund.status === 'pending' ? 'Pendiente de autorización' : refund.status === 'authorized' ? 'Autorizada; pendiente de registro' : 'Registrada' }}</p></div><div class="flex gap-2"><button v-if="refund.status === 'pending'" type="button" :disabled="refundActionForm.processing" class="min-h-10 rounded-xl border border-clinic-200 px-3 text-sm font-semibold text-clinic-700 hover:bg-clinic-50 disabled:opacity-60 dark:border-clinic-800 dark:text-clinic-300" @click="authorizeRefund(refund)">Autorizar</button><button v-if="refund.status === 'authorized'" type="button" :disabled="refundActionForm.processing" class="min-h-10 rounded-xl bg-clinic-600 px-3 text-sm font-semibold text-white hover:bg-clinic-700 disabled:opacity-60" @click="registerRefund(refund)">Registrar</button></div></div></div></section>
         </template>
         <div v-if="cancelTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"><form class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" @submit.prevent="submitCancellation"><h2 class="text-lg font-bold text-slate-950 dark:text-white">Anular {{ cancelTarget.number }}</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Sólo se pueden anular comprobantes sin cobros registrados.</p><label class="mt-5 block text-sm font-medium text-slate-700 dark:text-slate-200">Motivo<textarea v-model="cancelForm.reason" required rows="3" class="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" /></label><div class="mt-6 flex justify-end gap-3"><button type="button" class="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" @click="cancelTarget = null">Volver</button><button type="submit" :disabled="cancelForm.processing" class="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">Confirmar anulación</button></div></form></div>
+        <div v-if="adjustmentTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"><form class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" @submit.prevent="submitAdjustment"><h2 class="text-lg font-bold text-slate-950 dark:text-white">{{ adjustmentType === 'credit-note' ? 'Emitir nota de crédito' : 'Solicitar devolución' }}</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Comprobante {{ adjustmentTarget.number }} · máximo {{ currency(adjustmentType === 'credit-note' ? adjustmentTarget.total_amount : adjustmentTarget.paid_amount) }}.</p><label class="mt-5 block text-sm font-medium text-slate-700 dark:text-slate-200">Importe<input v-model.number="adjustmentForm.amount" required type="number" min="0.01" step="0.01" class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" /></label><label class="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-200">Motivo<textarea v-model="adjustmentForm.reason" required rows="3" class="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" /></label><div class="mt-6 flex justify-end gap-3"><button type="button" class="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" @click="adjustmentTarget = null">Volver</button><button type="submit" :disabled="adjustmentForm.processing" class="min-h-11 rounded-xl bg-clinic-600 px-4 text-sm font-semibold text-white hover:bg-clinic-700 disabled:opacity-60">Confirmar</button></div></form></div>
 
         <template v-if="section === 'accounting'">
             <section class="mt-6 grid gap-4 md:grid-cols-3"><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Asientos recientes</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ journalEntries.length }}</p></article><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Cierres registrados</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ cashClosures.length }}</p></article><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Cuentas activas</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ accountBalances.length }}</p></article></section>
