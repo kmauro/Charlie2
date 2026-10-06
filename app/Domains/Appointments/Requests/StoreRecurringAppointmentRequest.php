@@ -3,6 +3,7 @@
 namespace App\Domains\Appointments\Requests;
 
 use App\Domains\Appointments\Models\Appointment;
+use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
 use Illuminate\Validation\Rule;
 
@@ -12,7 +13,9 @@ class StoreRecurringAppointmentRequest extends StoreAppointmentRequest
     {
         $user = $this->user();
 
-        return $user instanceof User && $user->can('create', Appointment::class);
+        return $user instanceof User
+            && ! $user->hasRole(RoleCode::Patient)
+            && $user->can('create', Appointment::class);
     }
 
     /** @return array<string, array<int, mixed>> */

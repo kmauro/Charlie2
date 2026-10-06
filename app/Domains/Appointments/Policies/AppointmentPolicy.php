@@ -49,11 +49,20 @@ class AppointmentPolicy
 
     public function create(User $user): bool
     {
-        return $this->canAdministrativelyManage($user);
+        return $this->canAdministrativelyManage($user)
+            || ($user->hasRole(RoleCode::Patient) && $user->patient()->exists());
     }
 
     public function update(User $user, Appointment $appointment): bool
     {
+        if ($user->hasRole(RoleCode::Patient)) {
+            return $appointment->patient()->where('user_id', $user->getKey())->exists()
+                && in_array($appointment->status, [
+                    AppointmentStatus::Reserved,
+                    AppointmentStatus::Confirmed,
+                ], true);
+        }
+
         return $this->canAdministrativelyManage($user)
             && $this->scope->canAccessLocation($user, (int) $appointment->location_id)
             && in_array($appointment->status, [
@@ -68,6 +77,11 @@ class AppointmentPolicy
             && $this->scope->canAccessLocation($user, (int) $appointment->location_id)
             && $this->isOwnedByProfessionalWhenRequired($user, $appointment)
             && $appointment->status->availableTransitions() !== [];
+    }
+
+    public function manageWaitlist(User $user): bool
+    {
+        return $this->canAdministrativelyManage($user);
     }
 
     public function cancel(User $user, Appointment $appointment): bool

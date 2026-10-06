@@ -17,6 +17,7 @@ use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Professionals\Models\Professional;
 use App\Domains\Professionals\Models\ProfessionalSchedule;
+use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
@@ -56,7 +57,9 @@ class AppointmentController extends Controller
             'search',
         ]);
         $professionalScope = $this->service->professionalScopeFor($actor);
-        $locationScope = $this->service->locationScopeFor($actor);
+        $locationScope = $actor->hasRole(RoleCode::Patient)
+            ? null
+            : $this->service->locationScopeFor($actor);
         $patientScope = $this->service->patientScopeFor($actor);
         $appointments = $this->service
             ->paginate(
@@ -104,7 +107,9 @@ class AppointmentController extends Controller
             'urls' => [
                 'index' => route('appointments.index'),
                 'store' => route('appointments.store'),
-                'recurringStore' => route('appointments.recurring.store'),
+                ...(! $actor->hasRole(RoleCode::Patient)
+                    ? ['recurringStore' => route('appointments.recurring.store')]
+                    : []),
             ],
         ]);
     }
@@ -214,24 +219,30 @@ class AppointmentController extends Controller
     /** @return array<string, mixed> */
     private function formOptions(User $actor): array
     {
-        $professionalScope = $this->service->professionalScopeFor($actor);
-        $locationScope = $this->service->locationScopeFor($actor);
+        $isPatient = $actor->hasRole(RoleCode::Patient);
+        $professionalScope = $isPatient ? null : $this->service->professionalScopeFor($actor);
+        $locationScope = $isPatient ? null : $this->service->locationScopeFor($actor);
 
         return [
-            'patientOptions' => $this->patientOptions(),
+            'patientOptions' => $this->patientOptions($actor),
             'professionalOptions' => $this->professionalOptions($professionalScope, $locationScope),
             'locationOptions' => $this->locationOptions($locationScope),
             'roomOptions' => $this->roomOptions($locationScope),
             'agendaConstraints' => $this->service->agendaConstraints($professionalScope, $locationScope),
-            'typeOptions' => $this->typeOptions(),
+            'typeOptions' => $this->typeOptions($actor),
             'statusOptions' => $this->statusOptions(),
+            'allowOverbook' => ! $isPatient,
         ];
     }
 
     /** @return array<int, array{value: int, label: string, document_number: string}> */
-    private function patientOptions(): array
+    private function patientOptions(?User $actor = null): array
     {
-        return $this->service->availablePatients()
+        $patients = $actor?->hasRole(RoleCode::Patient)
+            ? Patient::query()->where('user_id', $actor->getKey())->get()
+            : $this->service->availablePatients();
+
+        return $patients
             ->map(fn (Patient $patient): array => [
                 'value' => (int) $patient->getKey(),
                 'label' => trim($patient->last_name.', '.$patient->first_name),
@@ -309,14 +320,18 @@ class AppointmentController extends Controller
     }
 
     /** @return array<int, array{value: string, label: string}> */
-    private function typeOptions(): array
+    private function typeOptions(?User $actor = null): array
     {
+        $types = $actor?->hasRole(RoleCode::Patient)
+            ? [AppointmentType::InPerson, AppointmentType::Virtual]
+            : AppointmentType::cases();
+
         return array_map(
             fn (AppointmentType $type): array => [
                 'value' => $type->value,
                 'label' => $type->label(),
             ],
-            AppointmentType::cases(),
+            $types,
         );
     }
 

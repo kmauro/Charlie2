@@ -197,6 +197,76 @@ it('renders index and form contracts from persisted references', function () {
             ->has('urls'));
 });
 
+it('allows patients to reserve and reschedule only their own in-person or virtual appointments', function () {
+    $actor = appointmentsActor(RoleCode::Patient);
+    $context = appointmentSchedulingContext();
+    $patient = Patient::factory()->for($actor)->create();
+    $payload = validAppointmentPayload($context, [
+        'patient_id' => $patient->getKey(),
+        'type' => AppointmentType::Virtual->value,
+        'office' => null,
+    ]);
+
+    $this->actingAs($actor)
+        ->get(route('appointments.create'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('appointments/views/Create')
+            ->has('patientOptions', 1)
+            ->has('typeOptions', 2)
+            ->where('allowOverbook', false)
+            ->missing('urls.recurringStore'));
+
+    $this->post(route('appointments.store'), $payload)
+        ->assertRedirect(route('appointments.index'));
+
+    $appointment = Appointment::query()->sole();
+
+    expect($appointment->patient_id)->toBe($patient->getKey())
+        ->and($appointment->type)->toBe(AppointmentType::Virtual)
+        ->and($actor->can('update', $appointment))->toBeTrue();
+
+    $newStart = $context['starts_at']->clone()->addWeek();
+
+    $this->put(route('appointments.update', $appointment), [
+        ...$payload,
+        'starts_at' => $newStart->format('Y-m-d\\TH:i'),
+        'lock_version' => $appointment->lock_version,
+    ])->assertRedirect(route('appointments.index'));
+
+    expect($appointment->refresh()->starts_at->equalTo($newStart))->toBeTrue();
+});
+
+it('keeps restricted appointment workflows under institutional control for patients', function () {
+    $actor = appointmentsActor(RoleCode::Patient);
+    $context = appointmentSchedulingContext();
+    $patient = Patient::factory()->for($actor)->create();
+
+    $this->actingAs($actor)
+        ->post(route('appointments.store'), validAppointmentPayload($context, [
+            'patient_id' => Patient::factory()->create()->getKey(),
+        ]))
+        ->assertSessionHasErrors('patient_id');
+
+    $this->post(route('appointments.store'), validAppointmentPayload($context, [
+        'patient_id' => $patient->getKey(),
+        'type' => AppointmentType::Emergency->value,
+    ]))->assertSessionHasErrors('type');
+
+    $this->post(route('appointments.store'), validAppointmentPayload($context, [
+        'patient_id' => $patient->getKey(),
+        'is_overbook' => true,
+    ]))->assertSessionHasErrors('is_overbook');
+
+    $this->post(route('appointments.recurring.store'), validAppointmentPayload($context, [
+        'patient_id' => $patient->getKey(),
+        'recurrence_frequency' => 'weekly',
+        'recurrence_occurrences' => 2,
+    ]))->assertForbidden();
+
+    $this->get(route('appointments.waitlist.index'))->assertForbidden();
+});
+
 it('creates using the professional duration snapshot', function () {
     $actor = appointmentsActor(RoleCode::Reception);
     $context = appointmentSchedulingContext(45);

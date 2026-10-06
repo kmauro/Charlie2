@@ -202,6 +202,8 @@ class AppointmentService
     ): Appointment {
         return DB::transaction(function () use ($data, $actor, $auditContext, $seriesId): Appointment {
             [$patient, $professional, $location] = $this->lockReferences($data);
+            $type = AppointmentType::from((string) $data['type']);
+            $this->ensurePatientSelfScheduling($actor, $patient, $type, (bool) ($data['is_overbook'] ?? false));
             $this->ensureLocationAccess($actor, $location);
             [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
                 $data,
@@ -216,7 +218,7 @@ class AppointmentService
                 $endsAt,
                 null,
                 (bool) ($data['is_overbook'] ?? false),
-                AppointmentType::from((string) $data['type']),
+                $type,
             );
             $room = $this->resolveConsultingRoom($data, $professional, $location, $startsAt, $endsAt);
 
@@ -391,6 +393,13 @@ class AppointmentService
             }
 
             [$patient, $professional, $location] = $this->lockReferences($data);
+            $type = AppointmentType::from((string) $data['type']);
+            $this->ensurePatientSelfScheduling($actor, $patient, $type, (bool) ($data['is_overbook'] ?? false));
+            if ($actor->hasRole(RoleCode::Patient) && $lockedAppointment->starts_at->lt(now()->addHours(24))) {
+                throw ValidationException::withMessages([
+                    'starts_at' => 'Los turnos sólo pueden reprogramarse con al menos 24 horas de anticipación.',
+                ]);
+            }
             $this->ensureLocationAccess($actor, $location);
             [$startsAt, $endsAt, $durationMinutes] = $this->appointmentWindow(
                 $data,
@@ -405,7 +414,7 @@ class AppointmentService
                 $endsAt,
                 (int) $lockedAppointment->getKey(),
                 (bool) ($data['is_overbook'] ?? false),
-                AppointmentType::from((string) $data['type']),
+                $type,
             );
             $room = $this->resolveConsultingRoom(
                 $data,
@@ -654,6 +663,35 @@ class AppointmentService
             ]);
         }
 
+    }
+
+    private function ensurePatientSelfScheduling(
+        User $actor,
+        Patient $patient,
+        AppointmentType $type,
+        bool $isOverbook,
+    ): void {
+        if (! $actor->hasRole(RoleCode::Patient)) {
+            return;
+        }
+
+        if ($patient->user_id !== $actor->getKey()) {
+            throw ValidationException::withMessages([
+                'patient_id' => 'Sólo podés gestionar tus propios turnos.',
+            ]);
+        }
+
+        if (! in_array($type, [AppointmentType::InPerson, AppointmentType::Virtual], true)) {
+            throw ValidationException::withMessages([
+                'type' => 'Desde el portal sólo podés solicitar turnos presenciales o virtuales.',
+            ]);
+        }
+
+        if ($isOverbook) {
+            throw ValidationException::withMessages([
+                'is_overbook' => 'Los sobreturnos deben ser gestionados por la institución.',
+            ]);
+        }
     }
 
     private function ensureWithinLocationHours(
@@ -967,6 +1005,10 @@ class AppointmentService
 
     private function ensureLocationAccess(User $actor, Location $location): void
     {
+        if ($actor->hasRole(RoleCode::Patient)) {
+            return;
+        }
+
         if (! $this->scope->canAccessLocation($actor, (int) $location->getKey())) {
             throw ValidationException::withMessages([
                 'location_id' => 'La sede seleccionada está fuera de tu alcance.',

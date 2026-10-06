@@ -29,6 +29,7 @@ const props = withDefaults(
         indexUrl?: string;
         submitUrl: string;
         recurringSubmitUrl?: string;
+        allowOverbook?: boolean;
         initialValues?: AppointmentInitialValues;
     }>(),
     {
@@ -42,6 +43,7 @@ const props = withDefaults(
         appointment: undefined,
         indexUrl: '/turnos',
         recurringSubmitUrl: undefined,
+        allowOverbook: true,
         initialValues: undefined,
     },
 );
@@ -593,7 +595,7 @@ const submit = (): void => {
                         </p>
                         <FieldError id="appointment-reason-error" :message="form.errors.reason" class="mt-1.5" />
                     </div>
-                    <label class="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
+                    <label v-if="allowOverbook" class="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-100">
                         <input v-model="form.is_overbook" type="checkbox" class="size-4 rounded border-amber-400 text-clinic-600 focus:ring-clinic-600" />
                         Registrar como sobreturno (mantiene el control de conflicto del paciente y del consultorio).
                     </label>
@@ -614,7 +616,7 @@ const submit = (): void => {
                 </div>
             </section>
 
-            <section v-if="!isEditing" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+            <section v-if="!isEditing && recurringSubmitUrl" class="rounded-2xl border border-slate-200 bg-white p-5 shadow-card dark:border-slate-800 dark:bg-slate-900 sm:p-6">
                 <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-clinic-100 bg-clinic-50/60 p-4 text-sm text-slate-800 dark:border-clinic-900/60 dark:bg-clinic-950/25 dark:text-slate-100">
                     <input v-model="isRecurring" type="checkbox" class="mt-0.5 size-4 rounded border-clinic-400 text-clinic-600 focus:ring-clinic-600" />
                     <span><span class="block font-semibold">Crear una serie recurrente</span><span class="mt-1 block text-xs leading-5 text-slate-600 dark:text-slate-300">Cada fecha se valida contra la agenda antes de guardar la serie completa.</span></span>

@@ -24,7 +24,7 @@ class AppointmentWaitlistController extends Controller
 
     public function index(Request $request): Response
     {
-        Gate::authorize('create', Appointment::class);
+        Gate::authorize('manageWaitlist', Appointment::class);
         $actor = $this->actor($request);
         $entries = AppointmentWaitlistEntry::query()->with(['patient:id,first_name,last_name,document_number', 'professional.user:id,name', 'location:id,name,code'])
             ->where('status', 'waiting')->orderByDesc('priority')->oldest()->get();
@@ -47,6 +47,7 @@ class AppointmentWaitlistController extends Controller
 
     public function store(StoreWaitlistEntryRequest $request): RedirectResponse
     {
+        Gate::authorize('manageWaitlist', Appointment::class);
         $entry = AppointmentWaitlistEntry::query()->create($request->validated());
         $this->audit->record(event: 'appointment.waitlist_created', auditable: $entry, actor: $this->actor($request), context: $this->context($request));
         Inertia::flash('success', 'La solicitud fue incorporada a la lista de espera.');
@@ -56,7 +57,7 @@ class AppointmentWaitlistController extends Controller
 
     public function createSchedule(Request $request, AppointmentWaitlistEntry $waitlistEntry): Response
     {
-        Gate::authorize('create', Appointment::class);
+        Gate::authorize('manageWaitlist', Appointment::class);
         abort_unless($waitlistEntry->status === 'waiting', 404);
 
         $initialValues = [
@@ -73,6 +74,7 @@ class AppointmentWaitlistController extends Controller
 
     public function schedule(StoreAppointmentRequest $request, AppointmentWaitlistEntry $waitlistEntry): RedirectResponse
     {
+        Gate::authorize('manageWaitlist', Appointment::class);
         $this->service->createFromWaitlist($waitlistEntry, $request->validated(), $this->actor($request), $this->context($request));
         Inertia::flash('success', 'El turno fue asignado y la solicitud salió de la lista de espera.');
 
@@ -102,6 +104,7 @@ class AppointmentWaitlistController extends Controller
             'agendaConstraints' => $this->service->agendaConstraints($scope, $locations),
             'typeOptions' => array_map(fn (AppointmentType $type): array => ['value' => $type->value, 'label' => $type->label()], AppointmentType::cases()),
             'statusOptions' => [],
+            'allowOverbook' => true,
         ];
     }
 

@@ -20,6 +20,7 @@ defineProps<{
     agendaConstraints: AppointmentAgendaConstraints;
     typeOptions: AppointmentOption[];
     statusOptions: AppointmentOption[];
+    allowOverbook: boolean;
     urls: {
         index: string;
         store: string;
@@ -45,6 +46,7 @@ defineProps<{
             :agenda-constraints="agendaConstraints"
             :type-options="typeOptions"
             :status-options="statusOptions"
+            :allow-overbook="allowOverbook"
             :index-url="urls.index"
             :submit-url="urls.store"
             :recurring-submit-url="urls.recurringStore"
