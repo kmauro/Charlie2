@@ -156,7 +156,30 @@ const accountInitials = computed(() =>
 const flash = computed<AppFlashData>(() => page.flash ?? {});
 
 const navigationItems = [
-    { label: 'Dashboard', href: '/dashboard', icon: 'dashboard' },
+    {
+        label: 'Dashboard',
+        href: '/dashboard',
+        icon: 'dashboard',
+        allowedRoles: [
+            'superadmin',
+            'administrator',
+            'manager',
+            'supervisor',
+            'reception',
+            'professional',
+            'nursing',
+            'emergency',
+            'accounting',
+            'sales',
+            'auditor',
+        ],
+    },
+    {
+        label: 'Mi portal',
+        href: '/portal',
+        icon: 'user',
+        allowedRoles: ['patient'],
+    },
     {
         label: 'Usuarios',
         href: '/usuarios',

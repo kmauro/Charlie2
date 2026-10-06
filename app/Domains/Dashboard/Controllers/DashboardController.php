@@ -15,6 +15,7 @@ use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserScopeService;
 use App\Http\Controllers\Controller;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -24,10 +25,15 @@ class DashboardController extends Controller
 {
     public function __construct(private UserScopeService $scope) {}
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request): Response|RedirectResponse
     {
         $actor = $request->user();
         abort_unless($actor instanceof User, 401);
+
+        if ($actor->hasRole(RoleCode::Patient)) {
+            return redirect()->route('patient-portal.show');
+        }
+
         $locationIds = $this->scope->locationIdsFor($actor);
         $professionalId = $this->professionalIdFor($actor);
 

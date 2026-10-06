@@ -96,7 +96,9 @@ it('allows an enabled account to reset its password with the emailed token', fun
 it('keeps blocked archived and deceased patients enabled for two months only', function (PatientStatus $status) {
     $user = patientPortalUser($status, now()->addMonthsNoOverflow(2));
 
-    $this->actingAs($user)->get(route('dashboard'))->assertSuccessful();
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('patient-portal.show'));
 
     $this->travel(2)->months();
     $this->travel(1)->seconds();

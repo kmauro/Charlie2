@@ -248,6 +248,52 @@ class PatientService
         }, 3);
     }
 
+    /** @param array{phone?: string|null, email: string, address?: string|null} $data */
+    public function updatePortalProfile(
+        Patient $patient,
+        array $data,
+        User $actor,
+        AuditContext $auditContext,
+    ): Patient {
+        return DB::transaction(function () use ($patient, $data, $actor, $auditContext): Patient {
+            $lockedPatient = $this->patients->lockForUpdate($patient);
+
+            abort_unless($lockedPatient->user_id === $actor->getKey() && $lockedPatient->canAccessPortal(), 403);
+
+            $beforeValues = Arr::only($this->patientAuditSnapshot($lockedPatient), [
+                'phone',
+                'email',
+                'address',
+            ]);
+            $lockedPatient->update([
+                'phone' => $this->nullableTrimmedString($data['phone'] ?? null),
+                'email' => Str::lower(trim($data['email'])),
+                'address' => $this->nullableSquishedString($data['address'] ?? null),
+                'lock_version' => $lockedPatient->lock_version + 1,
+            ]);
+            $this->users->updatePatientIdentity($actor, [
+                'name' => trim($lockedPatient->first_name.' '.$lockedPatient->last_name),
+                'email' => $lockedPatient->email,
+            ]);
+            $updatedPatient = $this->patients->findOrFail((int) $lockedPatient->getKey());
+
+            $this->audit->record(
+                event: 'patient.portal_profile_updated',
+                auditable: $updatedPatient,
+                beforeValues: $beforeValues,
+                afterValues: Arr::only($this->patientAuditSnapshot($updatedPatient), [
+                    'phone',
+                    'email',
+                    'address',
+                ]),
+                actor: $actor,
+                context: $auditContext,
+            );
+
+            return $updatedPatient;
+        }, 3);
+    }
+
     /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>

@@ -12,12 +12,13 @@ use App\Domains\Dashboard\Controllers\DashboardController;
 use App\Domains\ExternalClinicalRecords\Controllers\ExternalClinicalRecordController;
 use App\Domains\Organizations\Controllers\LegalEntityController;
 use App\Domains\Organizations\Controllers\OrganizationController;
-use App\Http\Controllers\Domains\Organizations\OrganizationContextController;
 use App\Domains\Patients\Controllers\PatientController;
+use App\Domains\Patients\Controllers\PatientPortalController;
 use App\Domains\Professionals\Controllers\OperationalAgendaController;
 use App\Domains\Professionals\Controllers\ProfessionalController;
 use App\Domains\Users\Controllers\UserController;
 use App\Http\Controllers\Domains\Billing\Controllers\BillingController;
+use App\Http\Controllers\Domains\Organizations\OrganizationContextController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/login');
@@ -50,6 +51,8 @@ Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/contexto-organizacion', [OrganizationContextController::class, 'store'])
         ->name('organization-context.store');
+    Route::get('/portal', [PatientPortalController::class, 'show'])->name('patient-portal.show');
+    Route::put('/portal/perfil', [PatientPortalController::class, 'update'])->name('patient-portal.update');
 
     Route::controller(BillingController::class)->prefix('facturacion')->name('billing.')->group(function (): void {
         Route::get('/', 'index')->name('index');
