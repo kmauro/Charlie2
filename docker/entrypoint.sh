@@ -28,6 +28,37 @@ if [ -z "${APP_KEY:-}" ]; then
     export APP_KEY
 fi
 
+if [ "${DB_CONNECTION:-mysql}" = "mysql" ]; then
+    attempts=0
+
+    until php -r '
+        try {
+            new PDO(
+                sprintf(
+                    "mysql:host=%s;port=%s;dbname=%s",
+                    getenv("DB_HOST"),
+                    getenv("DB_PORT"),
+                    getenv("DB_DATABASE"),
+                ),
+                getenv("DB_USERNAME"),
+                getenv("DB_PASSWORD"),
+            );
+        } catch (Throwable) {
+            exit(1);
+        }
+    '; do
+        attempts=$((attempts + 1))
+
+        if [ "$attempts" -ge 30 ]; then
+            echo "Database did not become ready after 60 seconds." >&2
+            exit 1
+        fi
+
+        echo "Waiting for database connection ($attempts/30)..."
+        sleep 2
+    done
+fi
+
 if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
     php artisan migrate --force --no-interaction
 fi
