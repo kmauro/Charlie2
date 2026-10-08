@@ -264,16 +264,9 @@ No se utilizará el estado `en atención`.
 ### Reglas
 
 - El paciente sólo consulta sus turnos durante la primera etapa.
-- En el futuro podrá habilitarse su autogestión.
-- Se contemplarán:
-  - Sobreturnos.
-  - Lista de espera.
-  - Bloqueos de agenda.
-  - Turnos recurrentes.
-  - Turnos presenciales.
-  - Turnos virtuales.
-  - Turnos de guardia.
-  - Procedimientos.
+- La lista de espera, los bloques de agenda y los turnos recurrentes ya están implementados.
+- Permanecen pendientes la autogestión, los sobreturnos, los turnos virtuales, los de guardia y los procedimientos.
+- Los turnos presenciales son el circuito operativo actual.
 - Cancelación permitida con al menos 24 horas de anticipación.
 - Anticipos y pagos asociados dependerán del plan de prestaciones.
 
@@ -306,7 +299,7 @@ No se utilizará el estado `en atención`.
 - Implementado un MVP administrativo por razón social y sede: facturas, anticipos, conceptos con impuestos, pagadores paciente/cobertura/mixto, cuotas, cobros parciales o totales, caja por sede, arqueos y asientos automáticos.
 - Las notas de crédito están limitadas al saldo aún no acreditado; las devoluciones requieren solicitud, autorización de Gerencia o Superadministración y registro posterior.
 - Las anulaciones de comprobantes sin cobros generan su asiento inverso; los importes de una devolución registrada ajustan el saldo cobrado.
-- Pendiente la emisión electrónica con ARCA, conciliación bancaria, administración de medios de pago, informes de período y definición fiscal definitiva.
+- Pendiente validar el MVP de extremo a extremo y completar la emisión electrónica con ARCA, conciliación bancaria, administración de medios de pago, informes de período y definición fiscal definitiva.
 
 - El sistema se preparará para una futura integración con ARCA.
 - La responsabilidad de pago puede corresponder al paciente, su cobertura o ambos.
@@ -332,6 +325,7 @@ No se utilizará el estado `en atención`.
 
 ## 12. Planes de prestaciones
 
+- Estado: pendiente. Su implementación depende de contar antes con responsables de pago y un MVP de facturación validado.
 - Representan paquetes de prestaciones para pacientes.
 - Podrán definir:
   - Nombre.
@@ -347,6 +341,8 @@ No se utilizará el estado `en atención`.
 - Un plan no se elimina físicamente: se archiva sin modificar contratos históricos.
 
 ## 13. Notificaciones
+
+Estado: pendiente. La primera entrega cubrirá recordatorios administrativos de turnos, preferencias y seguimiento de entrega sobre la infraestructura de cola.
 
 ### Canales previstos
 
@@ -546,20 +542,22 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 6. Integración clínica externa: parcialmente implementada; el módulo interno fue retirado y existe un enlace HTTPS autorizado y auditado. Quedan pendientes la URL productiva y el contrato de autenticación/contexto con el proveedor.
 7. Guardia e internación operativas: pendiente; la documentación clínica permanecerá en la webapp externa.
 8. Enfermería operativa: pendiente; medicación e información clínica permanecerán en la webapp externa.
-9. Facturación, pagos, cajas y contabilidad: MVP implementado con facturas, anticipos, cobros, cierres, notas de crédito, devoluciones y asientos automáticos; pendientes ARCA, conciliación, administración de medios de pago e informes de período.
-10. Planes de prestaciones: pendiente.
-11. Notificaciones administrativas externas: pendiente.
+9. Facturación, pagos, cajas y contabilidad: MVP implementado con facturas, anticipos, cobros, cierres, notas de crédito, devoluciones y asientos automáticos. Debe validarse de extremo a extremo; permanecen pendientes ARCA, conciliación, administración de medios de pago e informes de período.
+10. Planes de prestaciones: pendiente; depende de responsables de pago y del MVP de facturación validado.
+11. Notificaciones administrativas externas: pendiente; la primera entrega cubrirá recordatorios de turnos, preferencias y seguimiento de entrega sobre cola.
 12. Auditoría avanzada: consulta, filtros, exportación, retención anual y aviso por correo implementados; monitoreo e interoperabilidad continúan pendientes.
 13. Operación Docker: build, migraciones y login verificados; cola, scheduler, Mailpit y persistencia después de reinicios pendientes de prueba integral.
 
 ### Prioridades inmediatas
 
-1. Definir con el proveedor el contrato técnico, autenticación, autorización, disponibilidad y soporte de la webapp externa.
-2. Reemplazar la URL de demostración por la URL productiva y validar el flujo de extremo a extremo.
-3. Implementar el mecanismo federado o temporal acordado sin exponer datos sensibles en la URL.
-4. Completar la prueba integral Docker de cola, scheduler, Mailpit y persistencia tras reinicios.
-5. Completar responsables de pago, menores/tutores y autogestión del paciente antes de planes de prestaciones y cobros recurrentes.
-6. Evolucionar facturación con conciliación, informes de período y la integración ARCA una vez definidas las reglas fiscales.
+[Cierta] Estas prioridades excluyen deliberadamente el contrato con la webapp clínica externa y la autenticación multifactor, que continúan pendientes y requieren una decisión de producto independiente.
+
+1. Consolidar el MVP de facturación con pruebas de emisión, cobro, caja, cierre, notas de crédito, devoluciones, permisos y saldos consistentes.
+2. Completar menores, tutores, representantes y responsables de pago en el ciclo administrativo del paciente.
+3. Implementar sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos sobre la base actual de agenda, recurrencia, bloques y lista de espera.
+4. Implementar recordatorios de turnos, preferencias, seguimiento de entrega y correo operativo; WhatsApp quedará desacoplado detrás de un proveedor.
+5. Ejecutar y documentar la aceptación operativa de Docker: worker, scheduler, Mailpit y persistencia tras reinicios.
+6. Implementar planes de prestaciones, contratos históricos, vigencias, renovaciones y cobros recurrentes integrados con facturación y responsables de pago.
 
 ## 18. Decisiones de acceso confirmadas
 

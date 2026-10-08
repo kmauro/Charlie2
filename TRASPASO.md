@@ -1,6 +1,6 @@
 # Traspaso del proyecto Charlie2
 
-[Cierta] Fecha de revisión: **5 de octubre de 2026**. La evidencia técnica proviene del repositorio y de los comandos indicados en este documento. El build Docker, las migraciones y el login en contenedores fueron validados funcionalmente por la persona responsable del proyecto.
+[Cierta] Fecha de revisión: **8 de octubre de 2026**. La evidencia técnica proviene del repositorio y de los comandos indicados en este documento. El build Docker, las migraciones y el login en contenedores fueron validados funcionalmente por la persona responsable del proyecto.
 
 ## Qué recibe la persona entrante
 
@@ -110,14 +110,16 @@ docker compose down
 
 ## Prioridades para continuar
 
+[Cierta] La siguiente hoja de ruta no incluye el contrato con la webapp clínica externa ni la autenticación multifactor. Ambos continúan pendientes y requieren una priorización independiente.
+
 | Orden | Tarea | Criterio de terminación propuesto |
 | --- | --- | --- |
-| 1 | Formalizar integración clínica externa | Proveedor, URL por entorno, autenticación, autorización, contexto, vencimiento, disponibilidad y soporte acordados |
-| 2 | Implementar la integración segura acordada | Flujo extremo a extremo sin DNI, secretos ni identificadores sensibles en la URL |
-| 3 | Completar aceptación Docker | Worker, scheduler, Mailpit y persistencia verificados con evidencia |
-| 4 | Incorporar autenticación multifactor | Alta, recuperación y revocación cubiertas por pruebas |
-| 5 | Completar el ciclo administrativo del paciente y de turnos | Responsables de pago, menores/tutores, autogestión y tipos operativos de turno definidos y cubiertos por pruebas |
-| 6 | Consolidar facturación e incorporar módulos posteriores | Conciliación, ARCA, planes, notificaciones y los circuitos de guardia, internación y enfermería con criterios de aceptación previos |
+| 1 | Consolidar el MVP de facturación | Emisión, cobro, caja, cierre, nota de crédito, devolución y asiento probados de extremo a extremo; permisos y saldos consistentes |
+| 2 | Completar el ciclo administrativo del paciente | Menores, tutores, representantes y responsables de pago modelados, autorizados y cubiertos por pruebas |
+| 3 | Cerrar los circuitos de turnos pendientes | Sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos definidos, implementados y verificados |
+| 4 | Implementar notificaciones administrativas | Recordatorios de turno, preferencias, seguimiento de entrega y correo operativo funcionando sobre cola; WhatsApp detrás de un proveedor intercambiable |
+| 5 | Completar la aceptación operativa de Docker | Worker, scheduler, Mailpit y persistencia después de reinicios verificados con evidencia reproducible |
+| 6 | Implementar planes de prestaciones y cobros recurrentes | Planes, contratos históricos, vigencias, renovaciones y cobros recurrentes integrados con facturación y responsables de pago |
 
 ## Información externa aún necesaria
 
