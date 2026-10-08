@@ -17,3 +17,8 @@ Schedule::command('appointments:dispatch-reminders')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('coverages:generate-recurring-charges')
+    ->dailyAt('06:00')
+    ->withoutOverlapping()
+    ->onOneServer();

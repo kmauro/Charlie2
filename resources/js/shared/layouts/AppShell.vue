@@ -237,6 +237,12 @@ const navigationItems = [
         ],
     },
     {
+        label: 'Coberturas',
+        href: '/coberturas',
+        icon: 'wallet',
+        allowedRoles: ['superadmin', 'administrator', 'manager', 'accounting', 'reception', 'sales'],
+    },
+    {
         label: 'Contabilidad',
         href: '/facturacion?seccion=contabilidad',
         icon: 'receipt',
