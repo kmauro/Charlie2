@@ -17,7 +17,7 @@
   - Permisos individuales, alcance por múltiples sedes y razones sociales, vigencia asistencial, recuperación de contraseña y ciclo de acceso del paciente estabilizados.
   - Auditoría con consulta, exportación, retención anual y aviso previo por correo implementada.
   - Imagen Docker construida correctamente; migraciones y acceso por login verificados en contenedores según validación funcional del 24 de septiembre de 2026.
-  - Quedan pendientes las pruebas integrales de cola, scheduler, entrega en Mailpit y persistencia tras reinicios.
+  - Cola, scheduler, entrega en Mailpit y persistencia tras reinicios verificados en la aceptación operativa.
   - El esquema no contiene tablas, adjuntos ni alertas de historia clínica interna.
 
 ## 1. Objetivo
@@ -59,9 +59,9 @@ La primera fase contempló:
 - Dashboard: interfaz implementada con métricas operativas y pruebas coherentes.
 - Usuarios: gestión, roles, permisos individuales efectivos, suspensión, restauración, reinvitación, recuperación de contraseña y alcance por múltiples sedes y razones sociales implementados.
 - Profesionales: gestión, matrícula, especialidad, duración de turnos, horarios por sede, descansos, feriados, licencias, excepciones por fecha y agenda operativa implementados.
-- Pacientes: gestión administrativa, contactos, cobertura, estados, archivado y control de concurrencia implementados.
+- Pacientes: gestión administrativa, contactos, cobertura, estados, archivado, control de concurrencia, portal y autogestión, menores, tutores, representantes y responsables de pago implementados.
 - Razones sociales y sedes: persistencia, validación, archivado y restauración implementados.
-- Turnos: núcleo funcional implementado con asignación manual o automática de consultorio y bloqueo de conflictos de profesional, paciente, agenda y consultorio.
+- Turnos: núcleo funcional implementado con asignación manual o automática de consultorio, bloqueo de conflictos de profesional, paciente, agenda y consultorio, recurrencia, bloques, lista de espera, sobreturnos, autogestión y tipos virtuales, de guardia y procedimientos.
 - Auditoría: base append-only, eventos de autenticación y dominios estabilizados, consulta, filtros, exportación exclusiva del auditor y retención anual con aviso por correo implementados.
 - Historia clínica interna: retirada del código, las rutas, la interfaz, las migraciones, las pruebas y la base de datos.
 - Acceso clínico externo: implementado desde la ficha del paciente para profesionales con relación asistencial vigente, mediante una URL HTTPS configurable y con auditoría de accesos permitidos, denegados y fallos de configuración.
@@ -263,10 +263,9 @@ No se utilizará el estado `en atención`.
 
 ### Reglas
 
-- El paciente sólo consulta sus turnos durante la primera etapa.
-- La lista de espera, los bloques de agenda y los turnos recurrentes ya están implementados.
-- Permanecen pendientes la autogestión, los sobreturnos, los turnos virtuales, los de guardia y los procedimientos.
-- Los turnos presenciales son el circuito operativo actual.
+- El paciente puede gestionar sus turnos mediante el portal.
+- Lista de espera, bloques de agenda, recurrencia y sobreturnos están implementados.
+- Se encuentran disponibles turnos presenciales, virtuales, de guardia y procedimientos.
 - Cancelación permitida con al menos 24 horas de anticipación.
 - Anticipos y pagos asociados dependerán del plan de prestaciones.
 
@@ -325,7 +324,7 @@ No se utilizará el estado `en atención`.
 
 ## 12. Planes de prestaciones
 
-- Estado: pendiente. Su implementación depende de contar antes con responsables de pago y un MVP de facturación validado.
+- Estado: implementado; incluye contratos históricos, vigencias, renovaciones y cobros recurrentes, e integra facturación y responsables de pago.
 - Representan paquetes de prestaciones para pacientes.
 - Podrán definir:
   - Nombre.
@@ -342,7 +341,7 @@ No se utilizará el estado `en atención`.
 
 ## 13. Notificaciones
 
-Estado: pendiente. La primera entrega cubrirá recordatorios administrativos de turnos, preferencias y seguimiento de entrega sobre la infraestructura de cola.
+Estado: implementado para recordatorios administrativos de turnos, preferencias y seguimiento de entrega sobre la infraestructura de cola. WhatsApp permanece desacoplado detrás de un proveedor configurable.
 
 ### Canales previstos
 
@@ -537,27 +536,25 @@ El acceso externo seguirá el flujo `Vista de paciente -> controlador de integra
 1. Razones sociales y sedes: implementado, incluido el alcance de usuarios sobre múltiples sedes y razones sociales.
 2. Usuarios y permisos configurables: implementados y aplicados en las policies; autenticación multifactor pendiente.
 3. Profesionales: implementado el núcleo y la agenda avanzada con descansos, feriados por sede, licencias, excepciones por fecha, catálogo operativo de consultorios y asignación fija, manual o automática.
-4. Pacientes y responsables: gestión administrativa y acceso externo básico implementados; vinculación federada o contextual con la webapp externa pendiente.
-5. Turnos: núcleo, recurrencia, bloques de agenda y lista de espera implementados; sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos pendientes.
+4. Pacientes y responsables: gestión administrativa, portal y autogestión, menores, tutores, representantes y responsables de pago implementados; vinculación federada o contextual con la webapp externa pendiente.
+5. Turnos: núcleo, recurrencia, bloques de agenda, lista de espera, sobreturnos, autogestión y tipos virtuales, de guardia y procedimientos implementados.
 6. Integración clínica externa: parcialmente implementada; el módulo interno fue retirado y existe un enlace HTTPS autorizado y auditado. Quedan pendientes la URL productiva y el contrato de autenticación/contexto con el proveedor.
 7. Guardia e internación operativas: pendiente; la documentación clínica permanecerá en la webapp externa.
 8. Enfermería operativa: pendiente; medicación e información clínica permanecerán en la webapp externa.
 9. Facturación, pagos, cajas y contabilidad: MVP implementado con facturas, anticipos, cobros, cierres, notas de crédito, devoluciones y asientos automáticos. Debe validarse de extremo a extremo; permanecen pendientes ARCA, conciliación, administración de medios de pago e informes de período.
-10. Planes de prestaciones: pendiente; depende de responsables de pago y del MVP de facturación validado.
-11. Notificaciones administrativas externas: pendiente; la primera entrega cubrirá recordatorios de turnos, preferencias y seguimiento de entrega sobre cola.
+10. Planes de prestaciones: implementado; incluye contratos históricos, vigencias, renovaciones y cobros recurrentes, e integra facturación y responsables de pago.
+11. Notificaciones administrativas externas: implementadas para recordatorios de turnos, preferencias y seguimiento de entrega sobre cola; WhatsApp usa un proveedor desacoplado.
 12. Auditoría avanzada: consulta, filtros, exportación, retención anual y aviso por correo implementados; monitoreo e interoperabilidad continúan pendientes.
-13. Operación Docker: build, migraciones y login verificados; cola, scheduler, Mailpit y persistencia después de reinicios pendientes de prueba integral.
+13. Operación Docker: build, migraciones, login, cola, scheduler, Mailpit y persistencia después de reinicios verificados.
 
 ### Prioridades inmediatas
 
-[Cierta] Estas prioridades excluyen deliberadamente el contrato con la webapp clínica externa y la autenticación multifactor, que continúan pendientes y requieren una decisión de producto independiente.
-
 1. Consolidar el MVP de facturación con pruebas de emisión, cobro, caja, cierre, notas de crédito, devoluciones, permisos y saldos consistentes.
-2. Completar menores, tutores, representantes y responsables de pago en el ciclo administrativo del paciente.
-3. Implementar sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos sobre la base actual de agenda, recurrencia, bloques y lista de espera.
-4. Implementar recordatorios de turnos, preferencias, seguimiento de entrega y correo operativo; WhatsApp quedará desacoplado detrás de un proveedor.
-5. Ejecutar y documentar la aceptación operativa de Docker: worker, scheduler, Mailpit y persistencia tras reinicios.
-6. Implementar planes de prestaciones, contratos históricos, vigencias, renovaciones y cobros recurrentes integrados con facturación y responsables de pago.
+2. Evolucionar facturación y contabilidad con reglas fiscales definitivas, ARCA, conciliación bancaria, administración de medios de pago e informes de período.
+3. Implementar los circuitos administrativos no clínicos de guardia, internación y enfermería.
+4. Completar monitoreo, alertas, backups con restauración probada, TLS, cifrado de infraestructura e interoperabilidad.
+5. Formalizar e implementar el contrato de integración segura con la webapp clínica externa.
+6. Implementar autenticación multifactor con alta, recuperación, revocación y pruebas de los factores definidos.
 
 ## 18. Decisiones de acceso confirmadas
 

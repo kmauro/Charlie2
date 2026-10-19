@@ -13,6 +13,7 @@ use App\Domains\Billing\Requests\CancelInvoiceRequest;
 use App\Domains\Billing\Requests\CloseCashRegisterRequest;
 use App\Domains\Billing\Requests\IssueCreditNoteRequest;
 use App\Domains\Billing\Requests\OpenCashRegisterRequest;
+use App\Domains\Billing\Requests\RegisterRefundRequest;
 use App\Domains\Billing\Requests\StoreInvoiceRequest;
 use App\Domains\Billing\Requests\StorePaymentRequest;
 use App\Domains\Billing\Requests\StoreRefundRequest;
@@ -53,8 +54,8 @@ class BillingController extends Controller
 
         $locationIds = $locations->modelKeys();
         $legalEntityIds = $locations->pluck('legal_entity_id')->unique();
-
         return Inertia::render('billing/views/Index', [
+            'section' => $request->routeIs('accounting.*') ? 'accounting' : 'operations',
             'invoices' => Invoice::query()
                 ->whereIn('location_id', $locationIds)
                 ->latest('issued_at')
@@ -177,12 +178,13 @@ class BillingController extends Controller
         return back()->with('success', 'La devolución fue autorizada.');
     }
 
-    public function registerRefund(Request $request, Refund $refund): RedirectResponse
+    public function registerRefund(RegisterRefundRequest $request, Refund $refund): RedirectResponse
     {
         $actor = $this->actor($request);
         Gate::forUser($actor)->authorize('billing-full');
         $this->ensureLocation((int) Invoice::query()->findOrFail($refund->invoice_id)->location_id, $actor);
-        $this->billing->registerRefund($refund, $actor);
+        $data = $request->validated();
+        $this->billing->registerRefund($refund, $actor, (int) $data['payment_method_id'], $data['reference'] ?? null);
 
         return back()->with('success', 'La devolución externa fue registrada y contabilizada.');
     }

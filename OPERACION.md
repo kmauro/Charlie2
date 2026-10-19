@@ -1,6 +1,6 @@
 # Operación y mantenimiento
 
-[Cierta] Referencia técnica al 7 de septiembre de 2026. Instalación inicial: [README](README.md). Estado y tareas pendientes: [TRASPASO](TRASPASO.md).
+[Cierta] Referencia técnica al 8 de octubre de 2026. Instalación inicial: [README](README.md). Estado y tareas pendientes: [TRASPASO](TRASPASO.md) y [PLAN_PROYECTO](PLAN_PROYECTO.md).
 
 ## Configuración que debe transferirse
 
@@ -18,6 +18,7 @@
 | `SESSION_DRIVER`, `SESSION_LIFETIME`, `SESSION_ENCRYPT`, `SESSION_DOMAIN` | Plantilla: base de datos, 120 minutos y cifrado de sesión desactivado. |
 | `CACHE_STORE`, `QUEUE_CONNECTION` | Ambos usan base de datos en la plantilla; requieren sus tablas. |
 | `MAIL_*` | Transporte y remitente. `MAIL_MAILER=log` no entrega mensajes. |
+| `DOCKER_*` | Puertos, base y correo del entorno Docker local. La composición usa Mailpit por defecto; no incorporar secretos productivos. |
 | `EXTERNAL_CLINICAL_RECORD_URL` | Destino HTTPS; se lee desde `services.external_clinical_record.url`. |
 | `LOG_CHANNEL`, `LOG_STACK`, `LOG_LEVEL` | Plantilla: stack/single/debug; registros bajo `storage/logs`. |
 | `FILESYSTEM_DISK`, `AWS_*`, `REDIS_*` | Configuración de infraestructura disponible; no acredita una integración de negocio en uso. |
@@ -35,13 +36,25 @@
 5. Revisar migraciones pendientes antes de aplicarlas; disponer de backup restaurable.
 6. Compilar frontend y probar acceso, autorizaciones y flujos con datos ficticios en un entorno separado.
 
+## Entorno Docker local
+
+[Cierta] El repositorio incluye `Dockerfile`, `compose.yaml`, `.dockerignore` y la configuración bajo `docker/`. La composición ejecuta aplicación, worker, scheduler, MySQL y Mailpit; su build, migraciones, login, cola, scheduler, entrega en Mailpit y persistencia fueron verificados en la aceptación operativa.
+
+```powershell
+docker compose up -d --build
+docker compose ps
+docker compose logs -f app
+```
+
+[Cierta] La aplicación queda disponible en `http://localhost:8080` y Mailpit en `http://localhost:8025` con la configuración predeterminada. `docker compose down` conserva los volúmenes; `docker compose down -v` elimina base y almacenamiento persistente y sólo debe usarse para una reconstrucción deliberada.
+
 ## Despliegue de una versión
 
-[Cierta] No se encontró pipeline `.github`, configuración Docker ni procedimiento específico del proveedor en esta copia. La revisión no identifica un entorno de producción.
+[Cierta] El repositorio contiene una configuración Docker local, pero no un pipeline `.github` ni un procedimiento específico del proveedor. La revisión no identifica un entorno de producción.
 
 [Suposición] Secuencia propuesta para un despliegue controlado; no fue ejecutada contra producción:
 
-1. Validar pruebas y frontend. La suite actual tiene un fallo conocido; resolverlo o acordar explícitamente su tratamiento antes de liberar.
+1. Validar la suite, el chequeo TypeScript y el build frontend; la referencia del traspaso registra las verificaciones como aprobadas.
 2. Respaldar base, configuración privada, claves, archivos persistentes y versión anterior.
 3. Preparar la nueva versión con `composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction`, `npm ci` y `npm run build` en el entorno de construcción.
 4. Configurar `APP_ENV=production`, `APP_DEBUG=false`, URL real con HTTPS, correo real y destino clínico acordado.
@@ -59,9 +72,9 @@ php artisan up --no-interaction
 
 [Suposición] Si un paso falla, detener la secuencia y evaluar recuperación; no continuar automáticamente hasta `up`. Reiniciar procesos persistentes según el supervisor real. No ejecutar `db:seed`, `key:generate` ni `migrate:fresh` como parte de una actualización ordinaria.
 
-[Cierta] `bootstrap/app.php` declara comprobación de salud `/up`. El script de desarrollo inicia una escucha de cola, pero las invitaciones actuales se envían sincrónicamente. `routes/console.php` solo contiene el comando de ejemplo `inspire`; no hay tareas de negocio programadas allí.
+[Cierta] `bootstrap/app.php` declara comprobación de salud `/up`. `routes/console.php` programa la retención de auditoría, el despacho de recordatorios de turnos y la generación de cobros recurrentes. Las invitaciones se envían sincrónicamente; los recordatorios de turnos se procesan mediante cola.
 
-[Suposición] Después del despliegue, comprobar `/up`, login, listados, creación/edición de un caso ficticio en un entorno de validación y correo de invitación al destinatario controlado. Verificar también denegaciones por rol y acceso clínico con el proveedor. Una respuesta de `/up` no sustituye esas comprobaciones funcionales.
+[Suposición] Después del despliegue, comprobar `/up`, login, listados, creación/edición de un caso ficticio en un entorno de validación, correo de invitación al destinatario controlado y ejecución de recordatorios. Verificar también denegaciones por rol y acceso clínico con el proveedor. Una respuesta de `/up` no sustituye esas comprobaciones funcionales.
 
 ## Backup y recuperación
 
@@ -83,15 +96,16 @@ php artisan up --no-interaction
 | Manifest de Vite inexistente o recursos ausentes | Ejecutar `npm run build` o mantener `npm run dev` activo. Revisar `public/hot` si apunta a un servidor de desarrollo detenido. |
 | Error de conexión o tabla inexistente | Revisar `DB_*`, acceso al servicio y `php artisan migrate:status --no-interaction`; revisar también registro de proveedores de dominio. |
 | Seeder rechaza credenciales | Completar `SUPERADMIN_*`; contraseña mínima de 12 caracteres con mayúsculas, minúsculas, números y símbolos. |
-| Invitación no llega | `MAIL_MAILER=log` registra, no envía. Con SMTP, revisar configuración y error de la petición; la cola no resuelve ese envío síncrono. |
+| Invitación no llega | `MAIL_MAILER=log` registra, no envía. Con SMTP, revisar configuración y error de la petición; las invitaciones se envían sincrónicamente. |
+| Recordatorio no llega | Revisar preferencias del paciente, vencimiento/estado del turno, scheduler, worker, conexión de cola y entrega SMTP. |
 | Invitación inválida | Revisar vencimiento, consumo previo, reinvitación y coincidencia de URL/esquema. La firma y el token no deben modificarse. |
 | Login rechazado | Revisar credenciales, cuenta pendiente/suspendida, rol y limitación de intentos. |
-| 403 en un módulo | Consultar la matriz de policies en `ARQUITECTURA.md`; asignar un permiso individual no cambia esas policies. |
-| 403 en acceso clínico | Comprobar rol profesional, perfil activo y existencia del turno admitido por la regla de relación asistencial. |
+| 403 en un módulo | Consultar la matriz de policies en `ARQUITECTURA.md`, el rol habilitado y el permiso individual requerido por esa policy. |
+| 403 en acceso clínico | Comprobar rol profesional, perfil activo, permiso individual y existencia del turno admitido por la regla de relación asistencial. |
 | 503 en acceso clínico | Revisar `EXTERNAL_CLINICAL_RECORD_URL`: válida y HTTPS. Una URL válida no garantiza disponibilidad externa. |
 | Error de versión al guardar | Otra edición cambió `lock_version`; recargar, revisar cambios y volver a aplicar la edición. |
 | No se permite turno/cancelación | Revisar estados, horario futuro, agenda/sede, superposiciones, versión y anticipación mínima de 24 horas. |
-| Dashboard sigue en cero | Es el comportamiento fijo actual, no un indicador fiable de la base. |
+| Dashboard sin los valores esperados | Revisar datos operativos, alcance de sedes/razones sociales y permisos del usuario; las métricas se consultan desde la base. |
 | No se descifra auditoría restaurada | Verificar que la instalación usa la clave original; generar una nueva no recupera el contenido previo. |
 
 [Cierta] La caché de configuración puede mantener valores anteriores de `.env`. En desarrollo puede limpiarse con `php artisan config:clear --no-interaction`; en un despliegue, reconstruirla dentro del procedimiento de la versión. Los logs pueden contener datos personales y enlaces de invitación cuando se usa correo `log`; no compartirlos sin revisar y ocultar esos datos.

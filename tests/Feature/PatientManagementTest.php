@@ -83,6 +83,7 @@ function patientAbilities(
     bool $create,
     bool $update,
     bool $archive,
+    ?bool $manageStatus = null,
 ): array {
     return [
         'viewAny' => $read,
@@ -91,7 +92,7 @@ function patientAbilities(
         'update' => $update,
         'delete' => $archive,
         'restore' => $archive,
-        'manageStatus' => $archive,
+        'manageStatus' => $manageStatus ?? $archive,
     ];
 }
 
@@ -217,7 +218,13 @@ it('enforces the complete patient authorization matrix', function (
     ],
     'reception' => [
         RoleCode::Reception,
-        patientAbilities(read: true, create: true, update: true, archive: false),
+        patientAbilities(
+            read: true,
+            create: true,
+            update: true,
+            archive: true,
+            manageStatus: false,
+        ),
     ],
     'professional' => [
         RoleCode::Professional,

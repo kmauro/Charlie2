@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Domains\Billing\Contracts\CashReconciliationService;
+use App\Domains\Billing\Contracts\InvoiceBalanceService;
+use App\Domains\Billing\Contracts\JournalPostingService;
+use App\Domains\Billing\Services\EloquentCashReconciliationService;
+use App\Domains\Billing\Services\EloquentInvoiceBalanceService;
+use App\Domains\Billing\Services\EloquentJournalPostingService;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Models\User;
 use Illuminate\Support\Facades\Gate;
@@ -14,7 +20,9 @@ class BillingServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(InvoiceBalanceService::class, EloquentInvoiceBalanceService::class);
+        $this->app->bind(CashReconciliationService::class, EloquentCashReconciliationService::class);
+        $this->app->bind(JournalPostingService::class, EloquentJournalPostingService::class);
     }
 
     /**

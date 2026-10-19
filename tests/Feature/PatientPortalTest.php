@@ -24,6 +24,10 @@ it('shows a patient only their own portal profile and upcoming appointments', fu
     $user = portalPatientUser();
     $patient = Patient::factory()->for($user)->create();
     $ownAppointment = Appointment::factory()->for($patient)->create();
+    Appointment::factory()->for($patient)->create([
+        'starts_at' => now()->subDay(),
+        'ends_at' => now()->subDay()->addMinutes(30),
+    ]);
     Appointment::factory()->create();
 
     $this->actingAs($user)

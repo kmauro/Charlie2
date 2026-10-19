@@ -244,7 +244,7 @@ const navigationItems = [
     },
     {
         label: 'Contabilidad',
-        href: '/facturacion?seccion=contabilidad',
+        href: '/contabilidad',
         icon: 'receipt',
         allowedRoles: ['superadmin', 'administrator', 'manager', 'accounting'],
     },

@@ -25,6 +25,7 @@ const props = defineProps<{
 const search = ref(props.filters.search ?? '');
 const selectedStatus = ref(props.filters.status ?? '');
 const activeAction = ref<number | null>(null);
+const actionError = ref<string | null>(null);
 
 const summaryCards = computed(() => [
     {
@@ -163,8 +164,13 @@ const archivePatient = (patient: PatientListItem): void => {
     }
 
     activeAction.value = patient.id;
+    actionError.value = null;
     router.delete(`/pacientes/${patient.id}`, {
         preserveScroll: true,
+        preserveState: false,
+        onError: () => {
+            actionError.value = 'No se pudo archivar al paciente. Intentá nuevamente.';
+        },
         onFinish: () => {
             activeAction.value = null;
         },
@@ -181,11 +187,16 @@ const restorePatient = (patient: PatientListItem): void => {
     }
 
     activeAction.value = patient.id;
+    actionError.value = null;
     router.patch(
         `/pacientes/${patient.id}/restaurar`,
         {},
         {
             preserveScroll: true,
+            preserveState: false,
+            onError: () => {
+                actionError.value = 'No se pudo restaurar al paciente. Intentá nuevamente.';
+            },
             onFinish: () => {
                 activeAction.value = null;
             },
@@ -334,6 +345,14 @@ const restorePatient = (patient: PatientListItem): void => {
                     </form>
                 </div>
             </div>
+
+            <p
+                v-if="actionError"
+                role="alert"
+                class="mx-5 mt-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900/70 dark:bg-rose-950/30 dark:text-rose-200 sm:mx-6"
+            >
+                {{ actionError }}
+            </p>
 
             <ul
                 v-if="patients.data.length"

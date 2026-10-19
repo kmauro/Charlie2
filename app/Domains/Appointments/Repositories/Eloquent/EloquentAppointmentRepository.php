@@ -89,8 +89,12 @@ class EloquentAppointmentRepository implements AppointmentRepository
             ->toBase()
             ->selectRaw('COUNT(*) as total')
             ->selectRaw(
-                'COUNT(CASE WHEN status IN (?, ?) THEN 1 END) as scheduled',
-                [AppointmentStatus::Reserved->value, AppointmentStatus::Confirmed->value],
+                'COUNT(CASE WHEN status IN (?, ?) AND starts_at >= ? THEN 1 END) as scheduled',
+                [
+                    AppointmentStatus::Reserved->value,
+                    AppointmentStatus::Confirmed->value,
+                    now(),
+                ],
             )
             ->selectRaw(
                 'COUNT(CASE WHEN status IN (?, ?) THEN 1 END) as waiting',

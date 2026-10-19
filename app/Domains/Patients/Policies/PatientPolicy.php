@@ -62,7 +62,12 @@ class PatientPolicy
 
     public function manageStatus(User $user, ?Patient $patient = null): bool
     {
-        return $this->canArchive($user);
+        return $this->hasAnyRole($user, [
+            RoleCode::SuperAdmin,
+            RoleCode::Administrator,
+            RoleCode::Manager,
+            RoleCode::Supervisor,
+        ]);
     }
 
     public function accessExternalClinicalRecord(User $user, Patient $patient): bool
@@ -88,6 +93,7 @@ class PatientPolicy
             RoleCode::Administrator,
             RoleCode::Manager,
             RoleCode::Supervisor,
+            RoleCode::Reception,
         ]);
     }
 

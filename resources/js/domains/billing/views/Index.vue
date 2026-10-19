@@ -3,19 +3,22 @@ import BaseIcon from '@/shared/components/BaseIcon.vue';
 import AppShell from '@/shared/layouts/AppShell.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { router } from '@inertiajs/vue3';
 import { ChevronDown } from 'lucide-vue-next';
 
 type Invoice = { id: number; number: string; type: string; status: string; payer_type: string; coverage_name: string | null; total_amount: string; paid_amount: string; issued_at: string };
 type Location = { id: number; name: string; legal_entity_id: number };
 type Patient = { id: number; first_name: string; last_name: string; coverage_name: string };
-type PaymentMethod = { id: number; legal_entity_id: number; name: string };
+type PaymentMethod = { id: number; legal_entity_id: number; name: string; kind: string; requires_reference: boolean };
 type CashRegister = { id: number; location_id: number; opening_amount: string; opened_at: string | null };
 type CashClosure = { id: number; opening_amount: string; expected_amount: string; counted_amount: string; difference_amount: string; closed_at: string };
 type JournalEntry = { id: number; entry_date: string; description: string; lines: Array<{ id: number; debit: string; credit: string; account: { code: string; name: string } }> };
 type AccountBalance = { id: number; code: string; name: string; debits: string; credits: string };
 type Refund = { id: number; amount: string; reason: string; status: string; invoice: { number: string } };
+type Section = 'operations' | 'accounting';
 
 const props = defineProps<{
+    section: 'operations' | 'accounting';
     invoices: Invoice[];
     cashRegisters: CashRegister[];
     locations: Location[];
@@ -28,19 +31,30 @@ const props = defineProps<{
     permissions: { canManageAccounting: boolean; canIssueInvoices: boolean; canRecordPayments: boolean; canOperateCash: boolean; canCancelInvoices: boolean };
 }>();
 
-const section = ref<'operations' | 'accounting'>(new URLSearchParams(window.location.search).get('seccion') === 'contabilidad' ? 'accounting' : 'operations');
+
+
+const section = ref<Section>(props.section);
+function changeSection(newSection: Section) {
+    section.value = newSection;
+    if (newSection === 'operations') {
+        router.visit('/facturacion');
+    } else {
+        router.visit('/contabilidad');
+    }
+}
 const invoicePanelOpen = ref(false);
 const paymentPanelOpen = ref(false);
 const cashPanelOpen = ref(false);
 const cancelTarget = ref<Invoice | null>(null);
 const adjustmentTarget = ref<Invoice | null>(null);
 const adjustmentType = ref<'credit-note' | 'refund'>('credit-note');
+const refundRegistrationTarget = ref<Refund | null>(null);
 const invoiceForm = useForm({ location_id: props.locations[0]?.id ?? '', patient_id: '', payer_type: 'patient', coverage_name: '', coverage_amount: 0, type: 'invoice', items: [{ description: '', quantity: 1, unit_price: 0, tax_rate: 0 }] });
 const paymentForm = useForm({ invoice_id: '', payment_method_id: '', amount: 0, reference: '' });
 const cashForm = useForm({ location_id: props.locations[0]?.id ?? '', opening_amount: 0, counted_amount: 0 });
 const cancelForm = useForm({ reason: '' });
 const adjustmentForm = useForm({ amount: 0, reason: '' });
-const refundActionForm = useForm({});
+const refundActionForm = useForm({ payment_method_id: '', reference: '' });
 
 const currency = (amount: string | number): string => new Intl.NumberFormat('es-AR', {
     style: 'currency', currency: 'ARS',
@@ -74,7 +88,21 @@ const submitAdjustment = (): void => {
     adjustmentForm.post(endpoint, { preserveScroll: true, onSuccess: () => { adjustmentTarget.value = null; adjustmentForm.reset(); } });
 };
 const authorizeRefund = (refund: Refund): void => refundActionForm.post(`/facturacion/devoluciones/${refund.id}/autorizar`, { preserveScroll: true });
-const registerRefund = (refund: Refund): void => refundActionForm.post(`/facturacion/devoluciones/${refund.id}/registrar`, { preserveScroll: true });
+const registerRefund = (refund: Refund): void => {
+    refundRegistrationTarget.value = refund;
+    refundActionForm.reset();
+};
+const submitRefundRegistration = (): void => {
+    if (!refundRegistrationTarget.value) return;
+
+    refundActionForm.post(`/facturacion/devoluciones/${refundRegistrationTarget.value.id}/registrar`, {
+        preserveScroll: true,
+        onSuccess: () => {
+            refundRegistrationTarget.value = null;
+            refundActionForm.reset();
+        },
+    });
+};
 
 watch(() => invoiceForm.payer_type, (payerType) => { if (payerType === 'coverage') invoiceForm.coverage_amount = invoiceTotal.value; if (payerType === 'patient') { invoiceForm.coverage_amount = 0; invoiceForm.coverage_name = ''; } });
 watch(invoiceTotal, (total) => { if (invoiceForm.payer_type === 'coverage') invoiceForm.coverage_amount = total; });
@@ -84,8 +112,8 @@ watch(invoiceTotal, (total) => { if (invoiceForm.payer_type === 'coverage') invo
     <Head title="Facturación" />
     <AppShell title="Facturación y contabilidad" eyebrow="Administración" description="Operación de comprobantes, caja y consulta contable por sede.">
         <div class="flex flex-wrap gap-2 border-b border-slate-200 pb-4 dark:border-slate-800">
-            <button type="button" class="min-h-10 rounded-xl px-4 text-sm font-semibold transition" :class="section === 'operations' ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'" @click="section = 'operations'">Operación</button>
-            <button v-if="permissions.canManageAccounting" type="button" class="min-h-10 rounded-xl px-4 text-sm font-semibold transition" :class="section === 'accounting' ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'" @click="section = 'accounting'">Contabilidad</button>
+            <button type="button" class="min-h-10 rounded-xl px-4 text-sm font-semibold transition" :class="section === 'operations' ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'" @click="changeSection('operations')">Operación</button>
+            <button v-if="permissions.canManageAccounting" type="button" class="min-h-10 rounded-xl px-4 text-sm font-semibold transition" :class="section === 'accounting' ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'" @click="changeSection('accounting')">Contabilidad</button>
         </div>
 
         <template v-if="section === 'operations'">
@@ -146,6 +174,7 @@ watch(invoiceTotal, (total) => { if (invoiceForm.payer_type === 'coverage') invo
         </template>
         <div v-if="cancelTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"><form class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" @submit.prevent="submitCancellation"><h2 class="text-lg font-bold text-slate-950 dark:text-white">Anular {{ cancelTarget.number }}</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Sólo se pueden anular comprobantes sin cobros registrados.</p><label class="mt-5 block text-sm font-medium text-slate-700 dark:text-slate-200">Motivo<textarea v-model="cancelForm.reason" required rows="3" class="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" /></label><div class="mt-6 flex justify-end gap-3"><button type="button" class="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" @click="cancelTarget = null">Volver</button><button type="submit" :disabled="cancelForm.processing" class="min-h-11 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60">Confirmar anulación</button></div></form></div>
         <div v-if="adjustmentTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"><form class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" @submit.prevent="submitAdjustment"><h2 class="text-lg font-bold text-slate-950 dark:text-white">{{ adjustmentType === 'credit-note' ? 'Emitir nota de crédito' : 'Solicitar devolución' }}</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Comprobante {{ adjustmentTarget.number }} · máximo {{ currency(adjustmentType === 'credit-note' ? adjustmentTarget.total_amount : adjustmentTarget.paid_amount) }}.</p><label class="mt-5 block text-sm font-medium text-slate-700 dark:text-slate-200">Importe<input v-model.number="adjustmentForm.amount" required type="number" min="0.01" step="0.01" class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" /></label><label class="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-200">Motivo<textarea v-model="adjustmentForm.reason" required rows="3" class="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950" /></label><div class="mt-6 flex justify-end gap-3"><button type="button" class="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" @click="adjustmentTarget = null">Volver</button><button type="submit" :disabled="adjustmentForm.processing" class="min-h-11 rounded-xl bg-clinic-600 px-4 text-sm font-semibold text-white hover:bg-clinic-700 disabled:opacity-60">Confirmar</button></div></form></div>
+        <div v-if="refundRegistrationTarget" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm"><form class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900" @submit.prevent="submitRefundRegistration"><h2 class="text-lg font-bold text-slate-950 dark:text-white">Registrar salida de fondos</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Indicá cómo se efectivó la devolución para imputarla correctamente en caja y contabilidad.</p><label class="mt-5 block text-sm font-medium text-slate-700 dark:text-slate-200">Medio de devolución<select v-model="refundActionForm.payment_method_id" required class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950"><option value="">Seleccionar</option><option v-for="method in paymentMethods" :key="method.id" :value="method.id">{{ method.name }}</option></select></label><label class="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-200">Referencia<input v-model="refundActionForm.reference" type="text" maxlength="120" class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 dark:border-slate-700 dark:bg-slate-950" /></label><div class="mt-6 flex justify-end gap-3"><button type="button" class="min-h-11 rounded-xl px-4 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800" @click="refundRegistrationTarget = null">Volver</button><button type="submit" :disabled="refundActionForm.processing" class="min-h-11 rounded-xl bg-clinic-600 px-4 text-sm font-semibold text-white hover:bg-clinic-700 disabled:opacity-60">Registrar devolución</button></div></form></div>
 
         <template v-if="section === 'accounting'">
             <section class="mt-6 grid gap-4 md:grid-cols-3"><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Asientos recientes</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ journalEntries.length }}</p></article><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Cierres registrados</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ cashClosures.length }}</p></article><article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"><p class="text-sm text-slate-500">Cuentas activas</p><p class="mt-2 text-3xl font-bold text-slate-950 dark:text-white">{{ accountBalances.length }}</p></article></section>

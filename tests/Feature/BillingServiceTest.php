@@ -97,12 +97,12 @@ it('does not allow credit notes to exceed the original invoice total', function 
         ->toThrow(ValidationException::class);
 });
 
-it('prevents refunds from exceeding the amount collected and returns the invoice to issued', function () {
+it('allows sequential refunds without double counting registered refunds and deducts them from cash closure', function () {
     $actor = User::factory()->superAdmin()->create();
     $location = Location::factory()->create();
     $billing = app(BillingService::class);
     $invoice = issueBillingInvoice($billing, $location, $actor, 100);
-    $billing->openCashRegister($location, 0, $actor);
+    $billing->openCashRegister($location, 10, $actor);
     $billing->recordPayment([
         'invoice_id' => $invoice->getKey(),
         'payment_method_id' => PaymentMethod::query()->where('legal_entity_id', $location->legal_entity_id)->where('code', 'cash')->value('id'),
@@ -117,9 +117,17 @@ it('prevents refunds from exceeding the amount collected and returns the invoice
     $billing->authorizeRefund($refund, $actor);
     $billing->registerRefund($refund, $actor);
 
-    expect((float) $invoice->refresh()->paid_amount)->toBe(40.0)
+    $secondRefund = $billing->requestRefund($invoice, 40, 'Devolución del saldo restante.', $actor);
+    $billing->authorizeRefund($secondRefund, $actor);
+    $billing->registerRefund($secondRefund, $actor);
+    $closure = $billing->closeCashRegister($location, 10, $actor);
+
+    expect((float) $invoice->refresh()->paid_amount)->toBe(100.0)
         ->and($invoice->status)->toBe('issued')
-        ->and($refund->refresh()->status)->toBe('registered');
+        ->and($refund->refresh()->status)->toBe('registered')
+        ->and($secondRefund->refresh()->status)->toBe('registered')
+        ->and((float) $closure->expected_amount)->toBe(10.0)
+        ->and((float) $closure->difference_amount)->toBe(0.0);
 });
 
 it('requires installments to match the invoice total', function () {

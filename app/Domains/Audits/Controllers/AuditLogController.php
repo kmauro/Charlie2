@@ -55,7 +55,6 @@ class AuditLogController extends Controller
         Gate::authorize('export', AuditLog::class);
         $filters = Arr::except($request->validated(), ['per_page']);
         $actor = $this->authenticatedUser($request);
-
         $this->audit->recordResource(
             event: 'audit.exported',
             auditableType: AuditLog::class,
@@ -99,7 +98,6 @@ class AuditLogController extends Controller
                     ));
                 },
             );
-
             fclose($stream);
         }, 'auditoria-'.now()->format('Ymd-His').'.csv', [
             'Content-Type' => 'text/csv; charset=UTF-8',

@@ -127,7 +127,7 @@ const outcomeLabel = (outcome: string): string =>
             <div class="flex flex-wrap gap-2 md:col-span-2 xl:col-span-6">
                 <button type="submit" class="rounded-xl bg-clinic-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-clinic-700">Filtrar</button>
                 <button type="button" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" @click="clear">Limpiar</button>
-                <Link v-if="canExport" :href="exportUrl" class="ml-auto rounded-xl border border-clinic-200 px-4 py-2.5 text-sm font-semibold text-clinic-700 hover:bg-clinic-50 dark:border-clinic-800 dark:text-clinic-300 dark:hover:bg-clinic-950/40">Exportar CSV</Link>
+                <a v-if="canExport" :href="exportUrl" class="ml-auto rounded-xl border border-clinic-200 px-4 py-2.5 text-sm font-semibold text-clinic-700 hover:bg-clinic-50 dark:border-clinic-800 dark:text-clinic-300 dark:hover:bg-clinic-950/40">Exportar CSV</a>
             </div>
         </form>
 

@@ -2,6 +2,7 @@
 
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Coverages\Models\CoverageContractCharge;
+use App\Domains\Coverages\Models\CoveragePlan;
 use App\Domains\Coverages\Services\CoverageService;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
@@ -42,4 +43,27 @@ it('creates plan benefits and invoices an eligible recurring contract once', fun
         ->and(CoverageContractCharge::query()->whereBelongsTo($contract, 'contract')->count())->toBe(1)
         ->and(Invoice::query()->where('patient_id', $patient->getKey())->value('coverage_name'))->toBe('Plan Integral')
         ->and($contract->refresh()->next_charge_on->toDateString())->toBe(today()->addMonthNoOverflow()->toDateString());
+});
+
+it('stores a coverage plan through the management endpoint', function () {
+    $actor = User::factory()->superAdmin()->create();
+    $location = Location::factory()->create();
+
+    $this->actingAs($actor)
+        ->post(route('coverages.plans.store'), [
+            'legal_entity_id' => $location->legal_entity_id,
+            'name' => 'Plan QA 2026',
+            'code' => 'QA-2026',
+            'billing_cycle' => 'monthly',
+            'recurring_amount' => 1000,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('success', 'El plan de cobertura fue creado.');
+
+    $plan = CoveragePlan::query()
+        ->where('legal_entity_id', $location->legal_entity_id)
+        ->where('code', 'QA-2026')
+        ->sole();
+
+    expect($plan->name)->toBe('Plan QA 2026');
 });

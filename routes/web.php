@@ -55,7 +55,7 @@ Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void 
     Route::get('/portal', [PatientPortalController::class, 'show'])->name('patient-portal.show');
     Route::put('/portal/perfil', [PatientPortalController::class, 'update'])->name('patient-portal.update');
 
-    Route::controller(BillingController::class)->prefix('facturacion')->name('billing.')->group(function (): void {
+Route::controller(BillingController::class)->prefix('facturacion')->name('billing.')->group(function (): void {
         Route::get('/', 'index')->name('index');
         Route::post('/facturas', 'storeInvoice')->name('invoices.store');
         Route::post('/facturas/{invoice}/anulacion', 'cancelInvoice')->name('invoices.cancel');
@@ -66,6 +66,11 @@ Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void 
         Route::post('/cajas/{location}/cierre', 'closeCashRegister')->name('cash-registers.close');
         Route::post('/devoluciones/{refund}/autorizar', 'authorizeRefund')->name('refunds.authorize');
         Route::post('/devoluciones/{refund}/registrar', 'registerRefund')->name('refunds.register');
+    });
+
+    Route::controller(BillingController::class)->prefix('contabilidad')->name('accounting.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::get('/exportar', 'exportAccountingData')->name('export');
     });
 
     Route::controller(CoverageController::class)->prefix('coberturas')->name('coverages.')->group(function (): void {

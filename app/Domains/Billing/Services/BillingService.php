@@ -2,13 +2,14 @@
 
 namespace App\Domains\Billing\Services;
 
-use App\Domains\Billing\Models\Account;
+use App\Domains\Billing\Contracts\CashReconciliationService;
+use App\Domains\Billing\Contracts\InvoiceBalanceService;
+use App\Domains\Billing\Contracts\JournalPostingService;
+use App\Domains\Billing\Data\JournalLine;
 use App\Domains\Billing\Models\CashClosure;
 use App\Domains\Billing\Models\CashRegister;
 use App\Domains\Billing\Models\Invoice;
 use App\Domains\Billing\Models\InvoiceItem;
-use App\Domains\Billing\Models\JournalEntry;
-use App\Domains\Billing\Models\JournalEntryLine;
 use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\PaymentMethod;
 use App\Domains\Billing\Models\Refund;
@@ -22,7 +23,12 @@ use Illuminate\Validation\ValidationException;
 
 class BillingService
 {
-    public function __construct(private BillingSetupService $setup) {}
+    public function __construct(
+        private BillingSetupService $setup,
+        private InvoiceBalanceService $balances,
+        private JournalPostingService $journal,
+        private CashReconciliationService $cashReconciliation,
+    ) {}
 
     /** @param array{location_id: int, patient_id?: int|null, payer_type: string, coverage_name?: string|null, coverage_amount?: numeric, appointment_id?: int|null, type: string, items: array<int, array{description: string, quantity: numeric, unit_price: numeric, tax_rate?: numeric}>, installments?: array<int, array{amount: numeric, due_date: string}>} $data */
     public function issueInvoice(array $data, User $actor): Invoice
@@ -111,13 +117,14 @@ class BillingService
     {
         return DB::transaction(function () use ($invoice, $amount, $reason, $actor): Invoice {
             $original = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
-            $creditedAmount = (float) Invoice::query()
+            Invoice::query()
                 ->where('original_invoice_id', $original->getKey())
                 ->where('type', 'credit_note')
                 ->lockForUpdate()
-                ->sum('total_amount');
+                ->get();
+            $balance = $this->balances->forInvoice($original);
 
-            if ($original->status === 'canceled' || $original->type !== 'invoice' || $amount <= 0 || $amount > (float) $original->total_amount - $creditedAmount) {
+            if ($original->status === 'canceled' || $original->type !== 'invoice' || $amount <= 0 || $this->toCents($amount) > $balance->invoiceTotalCents - $balance->activeCreditNotesCents) {
                 throw ValidationException::withMessages(['amount' => 'La nota de crédito debe referir a una factura y no superar su total.']);
             }
             $creditNote = Invoice::create([
@@ -139,13 +146,14 @@ class BillingService
     {
         return DB::transaction(function () use ($invoice, $amount, $reason, $actor): Refund {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
-            $committedRefundAmount = (float) Refund::query()
+            Refund::query()
                 ->where('invoice_id', $invoice->getKey())
                 ->whereIn('status', ['pending', 'authorized', 'registered'])
                 ->lockForUpdate()
-                ->sum('amount');
+                ->get();
+            $balance = $this->balances->forInvoice($invoice);
 
-            if ($invoice->status === 'canceled' || $amount <= 0 || $amount > (float) $invoice->paid_amount - $committedRefundAmount) {
+            if ($invoice->status === 'canceled' || $amount <= 0 || $this->toCents($amount) > $balance->refundableCents) {
                 throw ValidationException::withMessages(['amount' => 'La devolución no puede superar lo efectivamente cobrado.']);
             }
 
@@ -183,7 +191,8 @@ class BillingService
         return DB::transaction(function () use ($data, $actor): Payment {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($data['invoice_id']);
             $method = PaymentMethod::query()->findOrFail($data['payment_method_id']);
-            $remaining = (float) $invoice->total_amount - (float) $invoice->paid_amount;
+            $balance = $this->balances->forInvoice($invoice);
+            $remaining = $this->fromCents($balance->receivableCents);
             $amount = (float) $data['amount'];
 
             if ($invoice->status === 'canceled' || $method->legal_entity_id !== $invoice->legal_entity_id || $amount <= 0 || $amount > $remaining) {
@@ -210,7 +219,7 @@ class BillingService
                 'reference' => $data['reference'] ?? null,
                 'paid_at' => now(),
             ]);
-            $invoice->update(['paid_amount' => (float) $invoice->paid_amount + $amount, 'status' => $remaining === $amount ? 'paid' : 'issued']);
+            $invoice->update(['paid_amount' => $this->fromCents($balance->paymentsCents + $this->toCents($amount)), 'status' => $this->toCents($amount) === $balance->receivableCents ? 'paid' : 'issued']);
             $this->postEntry($payment, $actor, 'Cobro '.$invoice->number, [
                 ['code' => $method->kind === 'cash' ? '1.1.01' : '1.1.02', 'debit' => $amount, 'credit' => 0],
                 ['code' => '1.1.03', 'debit' => 0, 'credit' => $amount],
@@ -240,8 +249,7 @@ class BillingService
             if (! $cashRegister->isOpen()) {
                 throw ValidationException::withMessages(['location_id' => 'La caja de esta sede no está abierta.']);
             }
-            $cashPayments = Payment::query()->where('cash_register_id', $cashRegister->getKey())->where('paid_at', '>=', $cashRegister->opened_at)->sum('amount');
-            $expected = (float) $cashRegister->opening_amount + (float) $cashPayments;
+            $expected = $this->fromCents($this->cashReconciliation->expectedAmountCents($cashRegister));
             $closure = CashClosure::create([
                 'cash_register_id' => $cashRegister->getKey(), 'location_id' => $location->getKey(), 'legal_entity_id' => $location->legal_entity_id,
                 'closed_by' => $actor->getKey(), 'opening_amount' => $cashRegister->opening_amount, 'expected_amount' => $expected,
@@ -271,23 +279,50 @@ class BillingService
         }, 3);
     }
 
-    public function registerRefund(Refund $refund, User $actor): Refund
+    public function registerRefund(Refund $refund, User $actor, ?int $paymentMethodId = null, ?string $reference = null): Refund
     {
-        return DB::transaction(function () use ($refund, $actor): Refund {
+        return DB::transaction(function () use ($refund, $actor, $paymentMethodId, $reference): Refund {
             $refund = Refund::query()->lockForUpdate()->findOrFail($refund->getKey());
             if ($refund->status !== 'authorized') {
                 throw ValidationException::withMessages(['refund' => 'La devolución debe estar autorizada antes de registrarse.']);
             }
 
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($refund->invoice_id);
-            $refund->update(['registered_by' => $actor->getKey(), 'registered_at' => now(), 'status' => 'registered']);
-            $invoice->update([
-                'paid_amount' => max(0, round((float) $invoice->paid_amount - (float) $refund->amount, 2)),
-                'status' => 'issued',
+            $paymentMethod = PaymentMethod::query()->findOrFail($paymentMethodId ?? Payment::query()
+                ->where('invoice_id', $invoice->getKey())
+                ->latest('paid_at')
+                ->value('payment_method_id'));
+
+            if ($paymentMethod->legal_entity_id !== $invoice->legal_entity_id) {
+                throw ValidationException::withMessages(['payment_method_id' => 'El medio de devolución debe pertenecer a la entidad de la factura.']);
+            }
+            if ($paymentMethod->requires_reference && blank($reference)) {
+                throw ValidationException::withMessages(['reference' => 'Este medio de devolución requiere una referencia.']);
+            }
+
+            $cashRegister = null;
+            if ($paymentMethod->kind === 'cash') {
+                $cashRegister = CashRegister::query()
+                    ->where('location_id', $invoice->location_id)
+                    ->lockForUpdate()
+                    ->first();
+                if ($cashRegister === null || ! $cashRegister->isOpen()) {
+                    throw ValidationException::withMessages(['payment_method_id' => 'La caja de la sede debe estar abierta para devolver efectivo.']);
+                }
+            }
+
+            $refund->update([
+                'registered_by' => $actor->getKey(),
+                'payment_method_id' => $paymentMethod->getKey(),
+                'cash_register_id' => $cashRegister?->getKey(),
+                'reference' => $reference,
+                'registered_at' => now(),
+                'status' => 'registered',
             ]);
+            $invoice->update(['status' => 'issued']);
             $this->postEntry($refund, $actor, 'Devolución externa '.$invoice->number, [
                 ['code' => '5.1.01', 'debit' => $refund->amount, 'credit' => 0],
-                ['code' => '1.1.02', 'debit' => 0, 'credit' => $refund->amount],
+                ['code' => $paymentMethod->kind === 'cash' ? '1.1.01' : '1.1.02', 'debit' => 0, 'credit' => $refund->amount],
             ], (int) $invoice->legal_entity_id);
 
             return $refund->refresh();
@@ -298,20 +333,17 @@ class BillingService
     private function postEntry(Model $source, User $actor, string $description, array $lines, ?int $legalEntityId = null): void
     {
         $legalEntityId ??= (int) $source->legal_entity_id;
-        $debits = array_sum(array_map(fn (array $line): float => (float) $line['debit'], $lines));
-        $credits = array_sum(array_map(fn (array $line): float => (float) $line['credit'], $lines));
-
-        if (round($debits, 2) !== round($credits, 2)) {
-            throw ValidationException::withMessages([
-                'accounting' => 'El asiento automático no está balanceado.',
-            ]);
-        }
-
-        $entry = JournalEntry::create(['legal_entity_id' => $legalEntityId, 'created_by' => $actor->getKey(), 'source_type' => $source::class, 'source_id' => $source->getKey(), 'entry_date' => now()->toDateString(), 'description' => $description]);
-        foreach ($lines as $line) {
-            $account = Account::query()->where('legal_entity_id', $legalEntityId)->where('code', $line['code'])->firstOrFail();
-            JournalEntryLine::create(['journal_entry_id' => $entry->getKey(), 'account_id' => $account->getKey(), 'debit' => $line['debit'], 'credit' => $line['credit']]);
-        }
+        $this->journal->post(
+            source: $source,
+            legalEntityId: $legalEntityId,
+            actor: $actor,
+            description: $description,
+            lines: array_map(fn (array $line): JournalLine => new JournalLine(
+                accountCode: $line['code'],
+                debitCents: $this->toCents($line['debit']),
+                creditCents: $this->toCents($line['credit']),
+            ), $lines),
+        );
     }
 
     private function nextNumber(int $legalEntityId, string $type): string
@@ -339,5 +371,15 @@ class BillingService
             ['code' => '2.1.01', 'debit' => $invoice->tax_amount, 'credit' => 0],
             ['code' => '1.1.03', 'debit' => 0, 'credit' => $invoice->total_amount],
         ]);
+    }
+
+    private function toCents(mixed $amount): int
+    {
+        return (int) round((float) $amount * 100);
+    }
+
+    private function fromCents(int $amount): float
+    {
+        return $amount / 100;
     }
 }

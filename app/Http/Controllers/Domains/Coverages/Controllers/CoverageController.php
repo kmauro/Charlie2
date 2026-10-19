@@ -4,15 +4,15 @@ namespace App\Http\Controllers\Domains\Coverages\Controllers;
 
 use App\Domains\Coverages\Models\CoverageContract;
 use App\Domains\Coverages\Models\CoveragePlan;
-use App\Domains\Coverages\Requests\StoreCoverageContractRequest;
-use App\Domains\Coverages\Requests\StoreCoveragePlanBenefitRequest;
-use App\Domains\Coverages\Requests\StoreCoveragePlanRequest;
 use App\Domains\Coverages\Services\CoverageService;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Models\User;
 use App\Domains\Users\Services\UserScopeService;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Domains\Coverages\Requests\StoreCoverageContractRequest;
+use App\Http\Requests\Domains\Coverages\Requests\StoreCoveragePlanBenefitRequest;
+use App\Http\Requests\Domains\Coverages\Requests\StoreCoveragePlanRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;

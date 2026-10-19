@@ -15,16 +15,16 @@
 | Autenticación | Login/logout, validación de cuenta activa, invitaciones firmadas de uso único y recuperación de contraseña | Autenticación multifactor pendiente |
 | Usuarios | Roles, permisos individuales efectivos, invitaciones, suspensión/restauración, protección del último superadministrador y alcance por múltiples sedes y razones sociales | No existen flujos de administración delegada fuera del superadministrador |
 | Profesionales | Perfil, matrícula/especialidad, duración, agenda por sede, cuenta vinculada y agenda operativa con descansos, feriados, licencias, excepciones y consultorios | Los criterios operativos finales quedan sujetos a la configuración de cada institución |
-| Pacientes | Identidad administrativa, cobertura/contactos, invitación, archivo/restauración, concurrencia y acceso de portal durante dos meses después del archivo | Menores, tutores, responsables de pago y autogestión completa pendientes |
+| Pacientes | Identidad administrativa, cobertura/contactos, invitación, archivo/restauración, concurrencia, portal, autogestión, menores, tutores, representantes y responsables de pago | El contrato de integración con la webapp clínica externa continúa pendiente |
 | Organización | Razones sociales y sedes, validación, archivo/restauración y alcance de usuarios | No implica contabilidad separada implementada |
-| Turnos | Altas, reprogramación, estados, cancelación, superposiciones, concurrencia, alcance organizacional, recurrencia, bloqueos y lista de espera | Sobreturnos, autogestión del paciente, turnos virtuales, de guardia y procedimientos pendientes |
+| Turnos | Altas, reprogramación, estados, cancelación, superposiciones, concurrencia, alcance organizacional, recurrencia, bloqueos, lista de espera, sobreturnos, autogestión y tipos virtuales, de guardia y procedimientos | La evolución posterior dependerá de las reglas operativas de cada institución |
 | Dashboard | Métricas operativas consultadas desde la base y contrato de prueba estabilizado | Su evolución dependerá de nuevos módulos operativos |
 | Acceso clínico externo | Permiso por rol/usuario, relación asistencial temporal, alcance por sede para encargados, redirección HTTPS y auditoría | Sin SSO, token temporal ni contexto opaco del paciente; contrato productivo pendiente |
 | Auditoría | Registro append-only por Eloquent, eventos estabilizados, filtros, interfaz, exportación exclusiva del auditor y retención anual con aviso por correo | Escrituras SQL directas quedan fuera de la protección del modelo; monitoreo avanzado pendiente |
 | Guardia, internación y enfermería | Roles y definiciones de alcance | Circuitos operativos completos pendientes |
 | Facturación, cobros, cajas y contabilidad | MVP operativo: facturas, anticipos, cobros parciales/totales, caja por sede, cierres, notas de crédito, devoluciones con autorización separada y asientos automáticos | Sin emisión electrónica ARCA, conciliación bancaria, administración de medios de pago ni reportes contables de cierre |
-| Planes de prestaciones | Requisitos definidos en el plan | Módulo pendiente |
-| Notificaciones | Invitaciones, recuperación de contraseña y aviso de retención de auditoría | Recordatorios de turnos, WhatsApp y seguimiento de entrega pendientes |
+| Planes de prestaciones | Planes, contratos históricos, vigencias, renovaciones y cobros recurrentes integrados con facturación y responsables de pago | La evolución posterior dependerá de las reglas comerciales de cada institución |
+| Notificaciones | Invitaciones, recuperación de contraseña, aviso de retención de auditoría, recordatorios de turnos, preferencias, seguimiento de entrega y proveedor desacoplado para WhatsApp | La operación depende de la configuración de proveedores por entorno |
 
 ## Arquitectura vigente
 
@@ -89,10 +89,10 @@ docker compose down
 | Build completo de las imágenes | Aprobado |
 | Migraciones durante el arranque | Aprobado |
 | Acceso mediante login | Aprobado |
-| Procesamiento real del worker | Pendiente |
-| Ejecución real del scheduler y limpieza de auditoría | Pendiente |
-| Recepción de correos en Mailpit | Pendiente |
-| Persistencia tras reiniciar o recrear contenedores | Pendiente |
+| Procesamiento real del worker | Aprobado |
+| Ejecución real del scheduler y limpieza de auditoría | Aprobado |
+| Recepción de correos en Mailpit | Aprobado |
+| Persistencia tras reiniciar o recrear contenedores | Aprobado |
 
 ## Verificación automatizada
 
@@ -110,16 +110,14 @@ docker compose down
 
 ## Prioridades para continuar
 
-[Cierta] La siguiente hoja de ruta no incluye el contrato con la webapp clínica externa ni la autenticación multifactor. Ambos continúan pendientes y requieren una priorización independiente.
-
 | Orden | Tarea | Criterio de terminación propuesto |
 | --- | --- | --- |
 | 1 | Consolidar el MVP de facturación | Emisión, cobro, caja, cierre, nota de crédito, devolución y asiento probados de extremo a extremo; permisos y saldos consistentes |
-| 2 | Completar el ciclo administrativo del paciente | Menores, tutores, representantes y responsables de pago modelados, autorizados y cubiertos por pruebas |
-| 3 | Cerrar los circuitos de turnos pendientes | Sobreturnos, autogestión, turnos virtuales, de guardia y procedimientos definidos, implementados y verificados |
-| 4 | Implementar notificaciones administrativas | Recordatorios de turno, preferencias, seguimiento de entrega y correo operativo funcionando sobre cola; WhatsApp detrás de un proveedor intercambiable |
-| 5 | Completar la aceptación operativa de Docker | Worker, scheduler, Mailpit y persistencia después de reinicios verificados con evidencia reproducible |
-| 6 | Implementar planes de prestaciones y cobros recurrentes | Planes, contratos históricos, vigencias, renovaciones y cobros recurrentes integrados con facturación y responsables de pago |
+| 2 | Evolucionar facturación y contabilidad | Reglas fiscales definitivas, ARCA, conciliación bancaria, administración de medios de pago e informes de período definidos e implementados |
+| 3 | Implementar guardia, internación y enfermería operativas | Circuitos administrativos no clínicos, autorización y trazabilidad definidos y cubiertos por pruebas |
+| 4 | Completar operación y seguridad avanzada | Monitoreo, alertas, backups con restauración probada, TLS, cifrado e interoperabilidad con responsables y evidencia operativa |
+| 5 | Formalizar e implementar la integración clínica externa | Contrato, URL por entorno, autenticación, autorización y contexto opaco acordados y verificados sin exponer datos sensibles |
+| 6 | Incorporar autenticación multifactor | Alta, recuperación, revocación y pruebas de los factores definidos |
 
 ## Información externa aún necesaria
 

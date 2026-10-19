@@ -17,11 +17,11 @@ withDefaults(
 );
 
 const readableLabel = (label: string): string => {
-    if (label.includes('Previous')) {
+    if (label.includes('previous')) {
         return 'Anterior';
     }
 
-    if (label.includes('Next')) {
+    if (label.includes('next')) {
         return 'Siguiente';
     }
 

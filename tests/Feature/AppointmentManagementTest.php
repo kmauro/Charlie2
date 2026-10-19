@@ -197,6 +197,28 @@ it('renders index and form contracts from persisted references', function () {
             ->has('urls'));
 });
 
+it('excludes past appointments from the scheduled summary', function () {
+    $actor = appointmentsActor(RoleCode::Administrator);
+    $pastAppointment = Appointment::factory()->create([
+        'starts_at' => now()->subDay(),
+        'ends_at' => now()->subDay()->addMinutes(30),
+        'status' => AppointmentStatus::Confirmed,
+    ]);
+    $upcomingAppointment = Appointment::factory()->create([
+        'starts_at' => now()->addDay(),
+        'ends_at' => now()->addDay()->addMinutes(30),
+        'status' => AppointmentStatus::Confirmed,
+    ]);
+    grantAppointmentLocation($actor, $pastAppointment->location);
+    grantAppointmentLocation($actor, $upcomingAppointment->location);
+
+    $this->actingAs($actor)
+        ->get(route('appointments.index'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('summaries.scheduled', 1));
+});
+
 it('allows patients to reserve and reschedule only their own in-person or virtual appointments', function () {
     $actor = appointmentsActor(RoleCode::Patient);
     $context = appointmentSchedulingContext();
