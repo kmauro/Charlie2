@@ -40,6 +40,46 @@ it('shows a patient only their own portal profile and upcoming appointments', fu
             ->where('upcomingAppointments.0.id', $ownAppointment->getKey()));
 });
 
+it('shows a patient only appointments from the current date onward in their appointments list', function () {
+    $user = portalPatientUser();
+    $patient = Patient::factory()->for($user)->create();
+    $upcomingAppointment = Appointment::factory()->for($patient)->create([
+        'starts_at' => now()->addHour(),
+        'ends_at' => now()->addHours(2),
+    ]);
+    Appointment::factory()->for($patient)->create([
+        'starts_at' => today()->subDay()->addHour(),
+        'ends_at' => today()->subDay()->addHours(2),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('appointments.index'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('appointments.data', 1)
+            ->where('appointments.data.0.id', $upcomingAppointment->getKey()));
+});
+
+it('keeps appointments from the current date visible in the portal', function () {
+    $user = portalPatientUser();
+    $patient = Patient::factory()->for($user)->create();
+    $todayAppointment = Appointment::factory()->for($patient)->create([
+        'starts_at' => today()->addHour(),
+        'ends_at' => today()->addHours(2),
+    ]);
+    Appointment::factory()->for($patient)->create([
+        'starts_at' => today()->subDay()->addHour(),
+        'ends_at' => today()->subDay()->addHours(2),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('patient-portal.show'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('upcomingAppointments', 1)
+            ->where('upcomingAppointments.0.id', $todayAppointment->getKey()));
+});
+
 it('redirects a patient away from the internal dashboard to their portal', function () {
     $user = portalPatientUser();
     Patient::factory()->for($user)->create();

@@ -58,7 +58,9 @@ it('limits appointment listings and mutations to assigned locations', function (
     $hiddenAppointment = Appointment::factory()->for($otherLocation)->create();
 
     $this->actingAs($user)
-        ->get(route('appointments.index'))
+        ->get(route('appointments.index', [
+            'date' => $visibleAppointment->starts_at->toDateString(),
+        ]))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->has('appointments.data', 1)

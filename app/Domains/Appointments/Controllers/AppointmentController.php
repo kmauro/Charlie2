@@ -56,6 +56,7 @@ class AppointmentController extends Controller
             'professional_id',
             'search',
         ]);
+        $filters['date'] ??= today()->toDateString();
         $professionalScope = $this->service->professionalScopeFor($actor);
         $locationScope = $actor->hasRole(RoleCode::Patient)
             ? null

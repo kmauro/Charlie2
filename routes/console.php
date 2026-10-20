@@ -18,6 +18,11 @@ Schedule::command('appointments:dispatch-reminders')
     ->withoutOverlapping()
     ->onOneServer();
 
+Schedule::command('appointments:cancel-expired')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->onOneServer();
+
 Schedule::command('coverages:generate-recurring-charges')
     ->dailyAt('06:00')
     ->withoutOverlapping()

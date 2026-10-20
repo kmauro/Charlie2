@@ -42,7 +42,7 @@ class PatientPortalController extends Controller
             ],
             'upcomingAppointments' => Appointment::query()
                 ->whereBelongsTo($patient)
-                ->where('starts_at', '>=', now())
+                ->where('starts_at', '>=', today())
                 ->whereNotIn('status', ['cancelled', 'absent'])
                 ->with(['professional.user:id,name', 'location:id,name'])
                 ->oldest('starts_at')

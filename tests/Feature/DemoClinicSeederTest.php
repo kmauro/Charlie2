@@ -29,9 +29,11 @@ it('gives demo receptionists access to both demo locations and their appointment
     $receptionist = User::query()->where('email', 'reception.1@demo.test')->sole();
 
     $this->actingAs($receptionist)
-        ->get(route('appointments.index'))
+        ->get(route('appointments.index', [
+            'date' => now()->next('Monday')->toDateString(),
+        ]))
         ->assertSuccessful()
-        ->assertInertia(fn ($page) => $page->has('appointments.data', 4));
+        ->assertInertia(fn ($page) => $page->has('appointments.data', 2));
 
     $this->get(route('appointments.create'))
         ->assertSuccessful()

@@ -4,6 +4,8 @@ namespace App\Domains\Patients\Services;
 
 use App\Domains\Audits\Data\AuditContext;
 use App\Domains\Audits\Services\AuditService;
+use App\Domains\Appointments\Enums\AppointmentStatus;
+use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Patients\Data\PatientCreationResult;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Models\Patient;
@@ -169,11 +171,13 @@ class PatientService
 
     public function archive(
         Patient $patient,
+        bool $cancelFutureAppointments,
         User $actor,
         AuditContext $auditContext,
     ): Patient {
         return DB::transaction(function () use (
             $patient,
+            $cancelFutureAppointments,
             $actor,
             $auditContext,
         ): Patient {
@@ -192,6 +196,25 @@ class PatientService
                 $lockedPatient->status,
                 now()->addMonthsNoOverflow(2),
             );
+
+            if ($cancelFutureAppointments) {
+                Appointment::query()
+                    ->whereBelongsTo($lockedPatient)
+                    ->where('starts_at', '>=', now())
+                    ->whereIn('status', [
+                        AppointmentStatus::Reserved->value,
+                        AppointmentStatus::Confirmed->value,
+                        AppointmentStatus::Waiting->value,
+                        AppointmentStatus::Present->value,
+                    ])
+                    ->update([
+                        'status' => AppointmentStatus::Cancelled->value,
+                        'cancellation_reason' => 'Cancelado al archivar al paciente.',
+                        'cancelled_at' => now(),
+                        'cancelled_by' => $actor->getKey(),
+                        'lock_version' => DB::raw('lock_version + 1'),
+                    ]);
+            }
 
             $this->audit->record(
                 event: 'patient.archived',

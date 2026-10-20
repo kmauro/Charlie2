@@ -72,8 +72,15 @@ const archivePatient = (): void => {
         return;
     }
 
+    const cancelFutureAppointments = window.confirm(
+        '¿También querés cancelar todos los turnos futuros del paciente?',
+    );
+
     activeAction.value = true;
     router.delete(`/pacientes/${props.patient.id}`, {
+        data: {
+            cancel_future_appointments: cancelFutureAppointments,
+        },
         onFinish: () => {
             activeAction.value = false;
         },

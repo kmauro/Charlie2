@@ -8,6 +8,7 @@ use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Enums\RegisteredSex;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Patients\Models\PatientContact;
+use App\Domains\Patients\Requests\ArchivePatientRequest;
 use App\Domains\Patients\Requests\StorePatientRequest;
 use App\Domains\Patients\Requests\UpdatePatientRequest;
 use App\Domains\Patients\Services\PatientService;
@@ -158,12 +159,12 @@ class PatientController extends Controller
         return redirect()->route('patients.show', $patient);
     }
 
-    public function destroy(Request $request, Patient $patient): RedirectResponse
+    public function destroy(ArchivePatientRequest $request, Patient $patient): RedirectResponse
     {
-        Gate::authorize('delete', $patient);
         $actor = $this->authenticatedUser($request);
         $this->service->archive(
             $patient,
+            (bool) $request->validated('cancel_future_appointments', false),
             $actor,
             $this->auditContext($request),
         );

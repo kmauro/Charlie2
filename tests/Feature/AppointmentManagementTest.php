@@ -152,7 +152,9 @@ it('renders index and form contracts from persisted references', function () {
     ]);
 
     $this->actingAs($actor)
-        ->get(route('appointments.index'))
+        ->get(route('appointments.index', [
+            'date' => $context['starts_at']->toDateString(),
+        ]))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->component('appointments/views/Index')
@@ -217,6 +219,28 @@ it('excludes past appointments from the scheduled summary', function () {
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->where('summaries.scheduled', 1));
+});
+
+it('defaults the appointments index to the current date', function () {
+    $actor = appointmentsActor(RoleCode::Administrator);
+    $todayAppointment = Appointment::factory()->create([
+        'starts_at' => today()->setTime(10, 0),
+        'ends_at' => today()->setTime(10, 30),
+    ]);
+    $tomorrowAppointment = Appointment::factory()->create([
+        'starts_at' => today()->addDay()->setTime(10, 0),
+        'ends_at' => today()->addDay()->setTime(10, 30),
+    ]);
+    grantAppointmentLocation($actor, $todayAppointment->location);
+    grantAppointmentLocation($actor, $tomorrowAppointment->location);
+
+    $this->actingAs($actor)
+        ->get(route('appointments.index'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('filters.date', today()->toDateString())
+            ->has('appointments.data', 1)
+            ->where('appointments.data.0.id', $todayAppointment->getKey()));
 });
 
 it('allows patients to reserve and reschedule only their own in-person or virtual appointments', function () {
@@ -617,6 +641,31 @@ it('blocks cancellation with less than 24 hours notice', function () {
         ->and($appointment->cancelled_at)->toBeNull();
 });
 
+it('cancels appointments that have been over for 24 hours', function () {
+    $expiredAppointment = Appointment::factory()->create([
+        'starts_at' => now()->subDay(),
+        'ends_at' => now()->subDay()->addMinutes(30),
+    ]);
+    $recentAppointment = Appointment::factory()->create([
+        'starts_at' => now()->subHours(23),
+        'ends_at' => now()->subHours(22)->addMinutes(30),
+    ]);
+    $attendedAppointment = Appointment::factory()->create([
+        'starts_at' => now()->subDays(2),
+        'ends_at' => now()->subDays(2)->addMinutes(30),
+        'status' => AppointmentStatus::Attended,
+    ]);
+
+    $this->artisan('appointments:cancel-expired')->assertSuccessful();
+
+    expect($expiredAppointment->refresh()->status)->toBe(AppointmentStatus::Cancelled)
+        ->and($expiredAppointment->cancellation_reason)
+        ->toBe('Cancelado automáticamente al superar 24 horas desde su inicio.')
+        ->and($expiredAppointment->cancelled_by)->toBeNull()
+        ->and($recentAppointment->refresh()->status)->toBe(AppointmentStatus::Reserved)
+        ->and($attendedAppointment->refresh()->status)->toBe(AppointmentStatus::Attended);
+});
+
 it('restricts professional listings to their own appointments', function () {
     $context = appointmentSchedulingContext();
     $ownAppointment = Appointment::factory()->create([
@@ -627,7 +676,9 @@ it('restricts professional listings to their own appointments', function () {
     Appointment::factory()->create();
 
     $this->actingAs($context['professional']->user)
-        ->get(route('appointments.index'))
+        ->get(route('appointments.index', [
+            'date' => $ownAppointment->starts_at->toDateString(),
+        ]))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->has('appointments.data', 1)

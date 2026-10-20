@@ -1,5 +1,7 @@
 <?php
 
+use App\Domains\Appointments\Enums\AppointmentStatus;
+use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Audits\Models\AuditLog;
 use App\Domains\Patients\Enums\PatientStatus;
 use App\Domains\Patients\Enums\RegisteredSex;
@@ -528,6 +530,31 @@ it('replaces every patient contact during an update', function () {
         ->and($patient->contacts()->count())->toBe(1)
         ->and($patient->contacts()->sole()->full_name)->toBe('Nuevo contacto')
         ->and($patient->contacts()->whereIn('id', $oldContactIds)->exists())->toBeFalse();
+});
+
+it('archives a patient and optionally cancels their future appointments', function () {
+    $actor = patientsActor(RoleCode::Administrator);
+    $patient = Patient::factory()->create();
+    $futureAppointment = Appointment::factory()->for($patient)->create([
+        'starts_at' => now()->addDays(2),
+        'ends_at' => now()->addDays(2)->addMinutes(30),
+    ]);
+    $pastAppointment = Appointment::factory()->for($patient)->create([
+        'starts_at' => now()->subDays(2),
+        'ends_at' => now()->subDays(2)->addMinutes(30),
+    ]);
+
+    $this->actingAs($actor)
+        ->delete(route('patients.destroy', $patient), [
+            'cancel_future_appointments' => true,
+        ])
+        ->assertRedirect(route('patients.index'))
+        ->assertInertiaFlash('success');
+
+    expect($patient->refresh()->status)->toBe(PatientStatus::Archived)
+        ->and($futureAppointment->refresh()->status)->toBe(AppointmentStatus::Cancelled)
+        ->and($futureAppointment->cancelled_by)->toBe($actor->getKey())
+        ->and($pastAppointment->refresh()->status)->toBe(AppointmentStatus::Reserved);
 });
 
 it('lets reception edit administrative data without changing status', function () {

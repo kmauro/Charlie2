@@ -53,6 +53,10 @@ class EloquentAppointmentRepository implements AppointmentRepository
                 'cancelledBy:id,name',
             ])
             ->when(
+                $patientId !== null,
+                fn (Builder $query) => $query->where('starts_at', '>=', today()),
+            )
+            ->when(
                 $filters['date'] ?? null,
                 fn (Builder $query, string $date) => $query->whereDate('starts_at', $date),
             )

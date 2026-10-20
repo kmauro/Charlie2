@@ -28,8 +28,15 @@ const props = defineProps<{
     };
 }>();
 
+const localDateValue = (): string => {
+    const today = new Date();
+    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
+
+    return today.toISOString().slice(0, 10);
+};
+
 const filterForm = reactive({
-    date: props.filters.date ?? '',
+    date: props.filters.date ?? localDateValue(),
     status: props.filters.status ?? '',
     type: props.filters.type ?? '',
     location_id: props.filters.location_id ?? '',
@@ -183,9 +190,7 @@ const changeDate = (days: number): void => {
 };
 
 const goToToday = (): void => {
-    const today = new Date();
-    today.setMinutes(today.getMinutes() - today.getTimezoneOffset());
-    filterForm.date = today.toISOString().slice(0, 10);
+    filterForm.date = localDateValue();
     applyFilters();
 };
 
