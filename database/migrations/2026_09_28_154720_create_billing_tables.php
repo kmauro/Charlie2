@@ -11,13 +11,29 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('legal_entities', function (Blueprint $table) {
-            $table->string('tax_condition', 32)->default('responsable_inscripto')->after('cuit');
-            $table->unsignedSmallInteger('fiscal_point_of_sale')->nullable()->after('fiscal_address');
-            $table->string('arca_environment', 16)->nullable()->after('fiscal_point_of_sale');
-        });
+        if (! Schema::hasColumn('legal_entities', 'tax_condition')) {
+            Schema::table('legal_entities', function (Blueprint $table) {
+                $table->string('tax_condition', 32)->default('responsable_inscripto')->after('cuit');
+            });
+        }
+        if (! Schema::hasColumn('legal_entities', 'fiscal_point_of_sale')) {
+            Schema::table('legal_entities', function (Blueprint $table) {
+                $table->unsignedSmallInteger('fiscal_point_of_sale')->nullable()->after('fiscal_address');
+            });
+        }
+        if (! Schema::hasColumn('legal_entities', 'arca_environment')) {
+            Schema::table('legal_entities', function (Blueprint $table) {
+                $table->string('arca_environment', 16)->nullable()->after('fiscal_point_of_sale');
+            });
+        }
 
-        Schema::create('fiscal_configurations', function (Blueprint $table) {
+        $createIfMissing = static function (string $table, \Closure $definition): void {
+            if (! Schema::hasTable($table)) {
+                Schema::create($table, $definition);
+            }
+        };
+
+        $createIfMissing('fiscal_configurations', function (Blueprint $table) {
             $table->id();
             $table->foreignId('legal_entity_id')->unique()->constrained()->restrictOnDelete();
             $table->boolean('arca_enabled')->default(false);
@@ -27,7 +43,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('accounts', function (Blueprint $table) {
+        $createIfMissing('accounts', function (Blueprint $table) {
             $table->id();
             $table->foreignId('legal_entity_id')->constrained()->restrictOnDelete();
             $table->string('code', 32);
@@ -39,7 +55,7 @@ return new class extends Migration
             $table->unique(['legal_entity_id', 'code']);
         });
 
-        Schema::create('payment_methods', function (Blueprint $table) {
+        $createIfMissing('payment_methods', function (Blueprint $table) {
             $table->id();
             $table->foreignId('legal_entity_id')->constrained()->restrictOnDelete();
             $table->string('code', 32);
@@ -51,7 +67,7 @@ return new class extends Migration
             $table->unique(['legal_entity_id', 'code']);
         });
 
-        Schema::create('cash_registers', function (Blueprint $table) {
+        $createIfMissing('cash_registers', function (Blueprint $table) {
             $table->id();
             $table->foreignId('location_id')->unique()->constrained()->restrictOnDelete();
             $table->foreignId('opened_by')->nullable()->constrained('users')->nullOnDelete();
@@ -60,7 +76,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('invoices', function (Blueprint $table) {
+        $createIfMissing('invoices', function (Blueprint $table) {
             $table->id();
             $table->foreignId('legal_entity_id')->constrained()->restrictOnDelete();
             $table->foreignId('location_id')->constrained()->restrictOnDelete();
@@ -82,7 +98,7 @@ return new class extends Migration
             $table->index(['location_id', 'status', 'issued_at']);
         });
 
-        Schema::create('invoice_items', function (Blueprint $table) {
+        $createIfMissing('invoice_items', function (Blueprint $table) {
             $table->id();
             $table->foreignId('invoice_id')->constrained()->cascadeOnDelete();
             $table->string('description');
@@ -93,7 +109,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('installments', function (Blueprint $table) {
+        $createIfMissing('installments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('invoice_id')->constrained()->cascadeOnDelete();
             $table->unsignedSmallInteger('number');
@@ -104,7 +120,7 @@ return new class extends Migration
             $table->unique(['invoice_id', 'number']);
         });
 
-        Schema::create('payments', function (Blueprint $table) {
+        $createIfMissing('payments', function (Blueprint $table) {
             $table->id();
             $table->foreignId('invoice_id')->nullable()->constrained()->restrictOnDelete();
             $table->foreignId('cash_register_id')->nullable()->constrained()->restrictOnDelete();
@@ -117,7 +133,7 @@ return new class extends Migration
             $table->index(['cash_register_id', 'paid_at']);
         });
 
-        Schema::create('refunds', function (Blueprint $table) {
+        $createIfMissing('refunds', function (Blueprint $table) {
             $table->id();
             $table->foreignId('invoice_id')->constrained()->restrictOnDelete();
             $table->foreignId('requested_by')->constrained('users')->restrictOnDelete();
@@ -131,7 +147,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('cash_closures', function (Blueprint $table) {
+        $createIfMissing('cash_closures', function (Blueprint $table) {
             $table->id();
             $table->foreignId('cash_register_id')->constrained()->restrictOnDelete();
             $table->foreignId('location_id')->constrained()->restrictOnDelete();
@@ -146,7 +162,7 @@ return new class extends Migration
             $table->index(['legal_entity_id', 'location_id', 'closed_at']);
         });
 
-        Schema::create('journal_entries', function (Blueprint $table) {
+        $createIfMissing('journal_entries', function (Blueprint $table) {
             $table->id();
             $table->foreignId('legal_entity_id')->constrained()->restrictOnDelete();
             $table->foreignId('created_by')->constrained('users')->restrictOnDelete();
@@ -157,7 +173,7 @@ return new class extends Migration
             $table->index(['legal_entity_id', 'entry_date']);
         });
 
-        Schema::create('journal_entry_lines', function (Blueprint $table) {
+        $createIfMissing('journal_entry_lines', function (Blueprint $table) {
             $table->id();
             $table->foreignId('journal_entry_id')->constrained()->cascadeOnDelete();
             $table->foreignId('account_id')->constrained()->restrictOnDelete();

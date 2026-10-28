@@ -13,7 +13,7 @@ COPY tsconfig.json vite.config.ts ./
 
 RUN npm run build
 
-FROM php:8.5.10-apache-bookworm AS php-base
+FROM php:8.5.12-apache-bookworm AS php-base
 
 ENV COMPOSER_ALLOW_SUPERUSER=1
 
