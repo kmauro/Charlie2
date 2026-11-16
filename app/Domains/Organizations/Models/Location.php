@@ -33,6 +33,7 @@ class Location extends Model
         'opening_time',
         'closing_time',
         'timezone',
+        'arca_point_of_sale',
         'services',
         'status',
         'archived_at',
@@ -85,6 +86,7 @@ class Location extends Model
     {
         return [
             'opening_date' => 'date',
+            'arca_point_of_sale' => 'integer',
             'services' => 'array',
             'status' => OrganizationStatus::class,
             'archived_at' => 'datetime',

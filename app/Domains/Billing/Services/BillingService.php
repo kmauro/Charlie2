@@ -13,6 +13,7 @@ use App\Domains\Billing\Models\InvoiceItem;
 use App\Domains\Billing\Models\Payment;
 use App\Domains\Billing\Models\PaymentMethod;
 use App\Domains\Billing\Models\Refund;
+use App\Jobs\Domains\Billing\Jobs\AuthorizeFiscalDocument;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Users\Enums\RoleCode;
@@ -28,6 +29,7 @@ class BillingService
         private InvoiceBalanceService $balances,
         private JournalPostingService $journal,
         private CashReconciliationService $cashReconciliation,
+        private FiscalDocumentService $fiscalDocuments,
     ) {}
 
     /** @param array{location_id: int, patient_id?: int|null, payer_type: string, coverage_name?: string|null, coverage_amount?: numeric, appointment_id?: int|null, type: string, items: array<int, array{description: string, quantity: numeric, unit_price: numeric, tax_rate?: numeric}>, installments?: array<int, array{amount: numeric, due_date: string}>} $data */
@@ -75,7 +77,7 @@ class BillingService
                 'appointment_id' => $data['appointment_id'] ?? null,
                 'created_by' => $actor->getKey(),
                 'type' => $data['type'],
-                'status' => 'issued',
+                'status' => $this->fiscalDocuments->shouldAuthorize($location) ? 'pending' : 'issued',
                 'number' => $this->nextNumber((int) $location->legal_entity_id, $data['type']),
                 'currency' => 'ARS',
                 'net_amount' => $netAmount,
@@ -103,7 +105,10 @@ class BillingService
                 ]);
             }
 
-            $this->postEntry($invoice, $actor, 'Emisión '.$invoice->number, [
+            if ($this->fiscalDocuments->shouldAuthorize($location)) {
+                $fiscalDocument = $this->fiscalDocuments->create($invoice, $location->loadMissing('legalEntity'), $actor);
+                AuthorizeFiscalDocument::dispatch((int) $fiscalDocument->getKey())->afterCommit();
+            } else $this->postEntry($invoice, $actor, 'Emisión '.$invoice->number, [
                 ['code' => '1.1.03', 'debit' => $totalAmount, 'credit' => 0],
                 ['code' => '4.1.01', 'debit' => 0, 'credit' => $netAmount],
                 ['code' => '2.1.01', 'debit' => 0, 'credit' => $taxAmount],
@@ -127,14 +132,19 @@ class BillingService
             if ($original->status === 'canceled' || $original->type !== 'invoice' || $amount <= 0 || $this->toCents($amount) > $balance->invoiceTotalCents - $balance->activeCreditNotesCents) {
                 throw ValidationException::withMessages(['amount' => 'La nota de crédito debe referir a una factura y no superar su total.']);
             }
+            $location = Location::query()->lockForUpdate()->findOrFail($original->location_id);
+            $fiscalOriginal = $original->fiscalDocument()->first();
             $creditNote = Invoice::create([
                 'legal_entity_id' => $original->legal_entity_id, 'location_id' => $original->location_id,
                 'patient_id' => $original->patient_id, 'payer_type' => $original->payer_type, 'coverage_name' => $original->coverage_name, 'coverage_amount' => 0, 'created_by' => $actor->getKey(), 'original_invoice_id' => $original->getKey(),
-                'type' => 'credit_note', 'status' => 'issued', 'number' => $this->nextNumber((int) $original->legal_entity_id, 'credit_note'),
+                'type' => 'credit_note', 'status' => $fiscalOriginal?->status->value === 'authorized' ? 'pending' : 'issued', 'number' => $this->nextNumber((int) $original->legal_entity_id, 'credit_note'),
                 'currency' => $original->currency, 'net_amount' => $amount, 'tax_amount' => 0, 'total_amount' => $amount, 'issued_at' => now(),
             ]);
             InvoiceItem::create(['invoice_id' => $creditNote->getKey(), 'description' => $reason, 'quantity' => 1, 'unit_price' => $amount, 'tax_rate' => 0, 'total_amount' => $amount]);
-            $this->postEntry($creditNote, $actor, 'Nota de crédito '.$creditNote->number, [
+            if ($fiscalOriginal?->status->value === 'authorized') {
+                $fiscalDocument = $this->fiscalDocuments->create($creditNote, $location->loadMissing('legalEntity'), $actor);
+                AuthorizeFiscalDocument::dispatch((int) $fiscalDocument->getKey())->afterCommit();
+            } else $this->postEntry($creditNote, $actor, 'Nota de crédito '.$creditNote->number, [
                 ['code' => '4.1.01', 'debit' => $amount, 'credit' => 0], ['code' => '1.1.03', 'debit' => 0, 'credit' => $amount],
             ]);
 
@@ -166,9 +176,9 @@ class BillingService
         return DB::transaction(function () use ($invoice, $reason, $actor): Invoice {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->getKey());
 
-            if ($invoice->status === 'canceled' || (float) $invoice->paid_amount > 0) {
+            if ($invoice->fiscalDocument()->exists() || $invoice->status === 'canceled' || (float) $invoice->paid_amount > 0) {
                 throw ValidationException::withMessages([
-                    'invoice' => 'Sólo se pueden anular comprobantes sin cobros registrados.',
+                    'invoice' => 'Los comprobantes fiscales se ajustan con nota de crédito; los demás sólo se anulan sin cobros registrados.',
                 ]);
             }
 
@@ -190,6 +200,7 @@ class BillingService
     {
         return DB::transaction(function () use ($data, $actor): Payment {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($data['invoice_id']);
+            if ($invoice->fiscalDocument()->where('status', '!=', 'authorized')->exists()) throw ValidationException::withMessages(['invoice_id' => 'El comprobante fiscal aún no fue autorizado.']);
             $method = PaymentMethod::query()->findOrFail($data['payment_method_id']);
             $balance = $this->balances->forInvoice($invoice);
             $remaining = $this->fromCents($balance->receivableCents);

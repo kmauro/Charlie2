@@ -53,8 +53,8 @@ class AccountingLedgerQueryService
             ->leftJoin($invoices->getTable().' as refund_invoices', 'refund_invoices.id', '=', 'refund_sources.invoice_id')
             ->where('journal_entries.legal_entity_id', $filters['legal_entity_id'])
             ->whereColumn('accounts.legal_entity_id', 'journal_entries.legal_entity_id')
-            ->when($filters['from'] ?? null, fn (Builder $query, string $from): Builder => $query->where('journal_entries.entry_date', '>=', $from))
-            ->when($filters['to'] ?? null, fn (Builder $query, string $to): Builder => $query->where('journal_entries.entry_date', '<=', $to))
+            ->when($filters['from'] ?? null, fn (Builder $query, string $from): Builder => $query->whereDate('journal_entries.entry_date', '>=', $from))
+            ->when($filters['to'] ?? null, fn (Builder $query, string $to): Builder => $query->whereDate('journal_entries.entry_date', '<=', $to))
             ->where(function (Builder $query) use ($locationIds): void {
                 $query->where(function (Builder $query) use ($locationIds): void {
                     $query->where('journal_entries.source_type', Invoice::class)

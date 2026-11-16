@@ -11,13 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('professional_schedules', function (Blueprint $table) {
-            $table->foreignId('location_id')
-                ->nullable()
-                ->after('location_name')
-                ->constrained('locations')
-                ->restrictOnDelete();
-        });
+        // MySQL can commit the column before Laravel records the migration.
+        if (! Schema::hasColumn('professional_schedules', 'location_id')) {
+            Schema::table('professional_schedules', function (Blueprint $table) {
+                $table->foreignId('location_id')->nullable()->after('location_name');
+            });
+        }
+
+        if (! Schema::hasForeignKey('professional_schedules', ['location_id'])) {
+            Schema::table('professional_schedules', function (Blueprint $table) {
+                $table->foreign('location_id')->references('id')->on('locations')->restrictOnDelete();
+            });
+        }
     }
 
     /**

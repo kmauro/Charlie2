@@ -27,3 +27,8 @@ Schedule::command('coverages:generate-recurring-charges')
     ->dailyAt('06:00')
     ->withoutOverlapping()
     ->onOneServer();
+
+Schedule::command('billing:dispatch-fiscal-documents')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->onOneServer();

@@ -77,6 +77,7 @@ class BillingController extends Controller
             'section' => $request->routeIs('accounting.*') ? 'accounting' : 'operations',
             'invoices' => Invoice::query()
                 ->whereIn('location_id', $locationIds)
+                ->with('fiscalDocument:id,invoice_id,status,fiscal_number,cae,cae_expires_at,observations')
                 ->latest('issued_at')
                 ->limit(50)
                 ->get(),
