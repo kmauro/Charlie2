@@ -37,6 +37,7 @@ class PatientPortalController extends Controller
                 'notification_preferences' => [
                     'appointment_reminders_by_email' => $preference?->appointment_reminders_by_email ?? true,
                     'appointment_reminders_by_whatsapp' => $preference?->appointment_reminders_by_whatsapp ?? false,
+                    'whatsapp_phone' => $preference?->whatsapp_phone,
                     'appointment_reminder_hours' => $preference?->appointment_reminder_hours ?? 24,
                 ],
             ],

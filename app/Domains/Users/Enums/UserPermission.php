@@ -9,6 +9,10 @@ enum UserPermission: string
     case AccessExternalClinicalRecord = 'access_external_clinical_record';
     case ViewAccounting = 'view_accounting';
     case ExportAudit = 'export_audit';
+    case ManageEmergencyVisits = 'manage_emergency_visits';
+    case ManageAdmissions = 'manage_admissions';
+    case ViewInpatientCensus = 'view_inpatient_census';
+    case ConfirmBedReception = 'confirm_bed_reception';
 
     /** @return array<int, RoleCode> */
     public function allowedRoles(): array
@@ -35,6 +39,10 @@ enum UserPermission: string
                 RoleCode::Accounting,
             ],
             self::ExportAudit => [RoleCode::Auditor],
+            self::ManageEmergencyVisits => [RoleCode::Administrator, RoleCode::Supervisor, RoleCode::Nursing, RoleCode::Emergency],
+            self::ManageAdmissions => [RoleCode::Administrator, RoleCode::Supervisor],
+            self::ViewInpatientCensus => [RoleCode::Administrator, RoleCode::Supervisor, RoleCode::Nursing, RoleCode::Emergency],
+            self::ConfirmBedReception => [RoleCode::Nursing],
         };
     }
 
@@ -51,6 +59,10 @@ enum UserPermission: string
             self::AccessExternalClinicalRecord => 'Acceder a historia clínica externa',
             self::ViewAccounting => 'Acceder a contabilidad',
             self::ExportAudit => 'Exportar auditoría',
+            self::ManageEmergencyVisits => 'Gestionar guardia',
+            self::ManageAdmissions => 'Gestionar internaciones',
+            self::ViewInpatientCensus => 'Consultar censo de internación',
+            self::ConfirmBedReception => 'Confirmar recepción de traslado',
         };
     }
 
@@ -62,6 +74,10 @@ enum UserPermission: string
             self::AccessExternalClinicalRecord => 'Abre la webapp externa cuando existe una relación asistencial vigente.',
             self::ViewAccounting => 'Consultar cierres de caja y balances mensuales.',
             self::ExportAudit => 'Permiso reservado a las funciones de auditoría.',
+            self::ManageEmergencyVisits => 'Registra, inicia, cierra y anula ingresos administrativos de guardia.',
+            self::ManageAdmissions => 'Administra camas, internaciones, traslados y egresos.',
+            self::ViewInpatientCensus => 'Consulta el censo operativo por sede y sector.',
+            self::ConfirmBedReception => 'Confirma la recepción administrativa de traslados.',
         };
     }
 

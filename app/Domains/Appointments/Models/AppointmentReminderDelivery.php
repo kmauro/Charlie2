@@ -10,7 +10,7 @@ class AppointmentReminderDelivery extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['appointment_id', 'channel', 'status', 'queued_at', 'delivered_at', 'failed_at', 'attempts', 'failure_reason'];
+    protected $fillable = ['appointment_id', 'channel', 'status', 'queued_at', 'delivered_at', 'failed_at', 'attempts', 'failure_reason', 'provider_message_id', 'idempotency_key', 'accepted_at'];
 
     /** @return BelongsTo<Appointment, $this> */
     public function appointment(): BelongsTo
@@ -20,6 +20,6 @@ class AppointmentReminderDelivery extends Model
 
     protected function casts(): array
     {
-        return ['queued_at' => 'datetime', 'delivered_at' => 'datetime', 'failed_at' => 'datetime', 'attempts' => 'integer'];
+        return ['queued_at' => 'datetime', 'delivered_at' => 'datetime', 'failed_at' => 'datetime', 'accepted_at' => 'datetime', 'attempts' => 'integer'];
     }
 }

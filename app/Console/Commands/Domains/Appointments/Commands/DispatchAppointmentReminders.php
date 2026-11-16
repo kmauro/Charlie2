@@ -5,6 +5,7 @@ namespace App\Console\Commands\Domains\Appointments\Commands;
 use App\Domains\Appointments\Models\Appointment;
 use App\Domains\Appointments\Models\AppointmentReminderDelivery;
 use App\Jobs\Domains\Appointments\Jobs\SendAppointmentReminder;
+use Illuminate\Support\Str;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -40,6 +41,15 @@ class DispatchAppointmentReminders extends Command
                             SendAppointmentReminder::dispatch((int) $delivery->getKey())->afterCommit();
                             $queued++;
                         }
+                    }
+                    if (config('whatsapp.enabled') && $preference?->appointment_reminders_by_whatsapp
+                        && $preference->whatsapp_consented_at !== null && $preference->whatsapp_revoked_at === null
+                        && filled($preference->whatsapp_phone) && now()->gte($appointment->starts_at->subHours($hours))) {
+                        $delivery = AppointmentReminderDelivery::query()->firstOrCreate(
+                            ['appointment_id' => $appointment->getKey(), 'channel' => 'whatsapp'],
+                            ['status' => 'queued', 'queued_at' => now(), 'idempotency_key' => (string) Str::uuid()],
+                        );
+                        if ($delivery->wasRecentlyCreated) { SendAppointmentReminder::dispatch((int) $delivery->getKey())->afterCommit(); $queued++; }
                     }
                 }
             });

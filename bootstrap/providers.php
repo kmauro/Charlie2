@@ -3,6 +3,7 @@
 use App\Domains\Appointments\Providers\AppointmentsServiceProvider;
 use App\Domains\Audits\Providers\AuditsServiceProvider;
 use App\Domains\Organizations\Providers\OrganizationsServiceProvider;
+use App\Domains\Operations\Providers\OperationsServiceProvider;
 use App\Domains\Patients\Providers\PatientsServiceProvider;
 use App\Domains\Professionals\Providers\ProfessionalsServiceProvider;
 use App\Domains\Users\Providers\UsersServiceProvider;
@@ -13,6 +14,7 @@ return [
     AppointmentsServiceProvider::class,
     AuditsServiceProvider::class,
     OrganizationsServiceProvider::class,
+    OperationsServiceProvider::class,
     PatientsServiceProvider::class,
     ProfessionalsServiceProvider::class,
     UsersServiceProvider::class,

@@ -12,6 +12,8 @@ use App\Domains\Dashboard\Controllers\DashboardController;
 use App\Domains\ExternalClinicalRecords\Controllers\ExternalClinicalRecordController;
 use App\Domains\Organizations\Controllers\LegalEntityController;
 use App\Domains\Organizations\Controllers\OrganizationController;
+use App\Domains\Operations\Controllers\AdmissionController;
+use App\Domains\Operations\Controllers\EmergencyVisitController;
 use App\Domains\Patients\Controllers\PatientController;
 use App\Domains\Patients\Controllers\PatientPortalController;
 use App\Domains\Professionals\Controllers\OperationalAgendaController;
@@ -173,5 +175,21 @@ Route::controller(BillingController::class)->prefix('facturacion')->name('billin
         Route::post('/', 'store')->name('store');
         Route::get('/{waitlistEntry}/asignar', 'createSchedule')->name('schedule.create');
         Route::post('/{waitlistEntry}/asignar', 'schedule')->name('schedule.store');
+    });
+
+    Route::controller(EmergencyVisitController::class)->prefix('guardia')->name('emergency_visits.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::patch('/{emergencyVisit}/iniciar', 'start')->name('start');
+        Route::patch('/{emergencyVisit}/cerrar', 'close')->name('close');
+        Route::patch('/{emergencyVisit}/anular', 'cancel')->name('cancel');
+    });
+
+    Route::controller(AdmissionController::class)->prefix('internaciones')->name('admissions.')->group(function (): void {
+        Route::get('/', 'index')->name('index');
+        Route::post('/', 'store')->name('store');
+        Route::patch('/{admission}/trasladar', 'transfer')->name('transfer');
+        Route::patch('/{admission}/egresar', 'discharge')->name('discharge');
+        Route::patch('/asignaciones/{bedAssignment}/recepcion', 'confirmReception')->name('assignments.confirm-reception');
     });
 });

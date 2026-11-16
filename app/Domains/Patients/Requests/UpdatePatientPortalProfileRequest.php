@@ -39,6 +39,7 @@ class UpdatePatientPortalProfileRequest extends FormRequest
             'address' => ['nullable', 'string', 'max:1000'],
             'appointment_reminders_by_email' => ['sometimes', 'boolean'],
             'appointment_reminders_by_whatsapp' => ['sometimes', 'boolean'],
+            'whatsapp_phone' => ['nullable', 'string', 'max:32', 'required_if:appointment_reminders_by_whatsapp,true'],
             'appointment_reminder_hours' => ['sometimes', 'integer', 'in:12,24,48'],
         ];
     }
@@ -51,6 +52,9 @@ class UpdatePatientPortalProfileRequest extends FormRequest
                 : null,
             'address' => filled($this->input('address'))
                 ? Str::squish((string) $this->input('address'))
+                : null,
+            'whatsapp_phone' => filled($this->input('whatsapp_phone'))
+                ? preg_replace('/[^0-9+]/', '', (string) $this->input('whatsapp_phone'))
                 : null,
         ]);
     }

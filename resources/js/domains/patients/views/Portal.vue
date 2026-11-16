@@ -15,7 +15,7 @@ const props = defineProps<{
         address: string | null;
         coverage_name: string;
         member_number: string | null;
-        notification_preferences: { appointment_reminders_by_email: boolean; appointment_reminders_by_whatsapp: boolean; appointment_reminder_hours: number };
+        notification_preferences: { appointment_reminders_by_email: boolean; appointment_reminders_by_whatsapp: boolean; whatsapp_phone: string | null; appointment_reminder_hours: number };
     };
     upcomingAppointments: Array<{
         id: number;
@@ -34,6 +34,7 @@ const form = useForm({
     address: props.patient.address ?? '',
     appointment_reminders_by_email: props.patient.notification_preferences.appointment_reminders_by_email,
     appointment_reminders_by_whatsapp: props.patient.notification_preferences.appointment_reminders_by_whatsapp,
+    whatsapp_phone: props.patient.notification_preferences.whatsapp_phone ?? props.patient.phone ?? '',
     appointment_reminder_hours: props.patient.notification_preferences.appointment_reminder_hours,
 });
 const formatDate = (value: string): string => new Intl.DateTimeFormat('es-AR', {

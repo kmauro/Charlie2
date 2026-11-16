@@ -261,6 +261,18 @@ const navigationItems = [
         ],
     },
     {
+        label: 'Guardia',
+        href: '/guardia',
+        icon: 'clock',
+        allowedRoles: ['superadmin', 'administrator', 'supervisor', 'nursing', 'emergency'],
+    },
+    {
+        label: 'Internaciones',
+        href: '/internaciones',
+        icon: 'building',
+        allowedRoles: ['superadmin', 'administrator', 'supervisor', 'nursing', 'emergency'],
+    },
+    {
         label: 'Sedes',
         href: '/organizacion/sedes',
         icon: 'building',

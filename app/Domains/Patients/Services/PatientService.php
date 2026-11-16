@@ -271,7 +271,7 @@ class PatientService
         }, 3);
     }
 
-    /** @param array{phone?: string|null, email: string, address?: string|null, appointment_reminders_by_email?: bool, appointment_reminders_by_whatsapp?: bool, appointment_reminder_hours?: int} $data */
+    /** @param array{phone?: string|null, email: string, address?: string|null, appointment_reminders_by_email?: bool, appointment_reminders_by_whatsapp?: bool, whatsapp_phone?: string|null, appointment_reminder_hours?: int} $data */
     public function updatePortalProfile(
         Patient $patient,
         array $data,
@@ -298,10 +298,16 @@ class PatientService
                 'name' => trim($lockedPatient->first_name.' '.$lockedPatient->last_name),
                 'email' => $lockedPatient->email,
             ]);
+            $previousPreference = $lockedPatient->notificationPreference()->first();
+            $whatsAppEnabled = (bool) ($data['appointment_reminders_by_whatsapp'] ?? false);
+            $whatsAppPhone = $whatsAppEnabled ? ($data['whatsapp_phone'] ?? null) : null;
             $lockedPatient->notificationPreference()->updateOrCreate([], [
                 'appointment_reminders_by_email' => (bool) ($data['appointment_reminders_by_email'] ?? true),
-                'appointment_reminders_by_whatsapp' => (bool) ($data['appointment_reminders_by_whatsapp'] ?? false),
+                'appointment_reminders_by_whatsapp' => $whatsAppEnabled,
                 'appointment_reminder_hours' => (int) ($data['appointment_reminder_hours'] ?? 24),
+                'whatsapp_phone' => $whatsAppPhone,
+                'whatsapp_consented_at' => $whatsAppEnabled && ($previousPreference?->whatsapp_phone !== $whatsAppPhone || $previousPreference?->whatsapp_consented_at === null) ? now() : $previousPreference?->whatsapp_consented_at,
+                'whatsapp_revoked_at' => $whatsAppEnabled ? null : now(),
             ]);
             $updatedPatient = $this->patients->findOrFail((int) $lockedPatient->getKey());
 
