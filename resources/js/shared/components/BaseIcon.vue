@@ -39,6 +39,7 @@ const icons: Record<string, string[]> = {
     'circle-alert': ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M12 7v6', 'M12 17h.01'],
     close: ['M18 6 6 18', 'm6 6 12 12'],
     dashboard: ['M4 4h6v6H4z', 'M14 4h6v10h-6z', 'M4 14h6v6H4z', 'M14 18h6v2h-6z'],
+    download: ['M12 3v12', 'm7 10 5 5 5-5', 'M5 21h14'],
     contact: ['M4 4h16v16H4z', 'M8 9a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0', 'M7 17a4 4 0 0 1 7 0', 'M16 8h2', 'M16 12h2'],
     copy: ['M8 8h11v11H8z', 'M5 16H3V3h13v2'],
     edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z'],

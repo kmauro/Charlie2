@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Domains\Billing\Controllers;
 
-use App\Domains\Billing\Models\Account;
 use App\Domains\Billing\Models\CashClosure;
 use App\Domains\Billing\Models\CashRegister;
 use App\Domains\Billing\Models\Invoice;
@@ -10,6 +9,7 @@ use App\Domains\Billing\Models\JournalEntry;
 use App\Domains\Billing\Models\PaymentMethod;
 use App\Domains\Billing\Models\Refund;
 use App\Domains\Billing\Requests\CancelInvoiceRequest;
+use App\Domains\Billing\Requests\ExportAccountingRequest;
 use App\Domains\Billing\Requests\CloseCashRegisterRequest;
 use App\Domains\Billing\Requests\IssueCreditNoteRequest;
 use App\Domains\Billing\Requests\OpenCashRegisterRequest;
@@ -18,6 +18,9 @@ use App\Domains\Billing\Requests\StoreInvoiceRequest;
 use App\Domains\Billing\Requests\StorePaymentRequest;
 use App\Domains\Billing\Requests\StoreRefundRequest;
 use App\Domains\Billing\Services\BillingService;
+use App\Domains\Billing\Services\AccountingLedgerQueryService;
+use App\Domains\Audits\Data\AuditContext;
+use App\Domains\Audits\Services\AuditService;
 use App\Domains\Organizations\Models\Location;
 use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Models\User;
@@ -26,34 +29,50 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BillingController extends Controller
 {
-    public function __construct(private BillingService $billing, private UserScopeService $scope) {}
+    public function __construct(
+        private BillingService $billing,
+        private UserScopeService $scope,
+        private AccountingLedgerQueryService $ledger,
+        private AuditService $audit,
+    ) {}
 
     public function index(Request $request): Response
     {
         $actor = $this->actor($request);
-        $this->authorizeOperator($actor);
-        $locationIds = $this->scope->locationIdsFor($actor);
-
-        $locations = Location::query()
-            ->when($locationIds !== null, fn ($query) => $query->whereIn('id', $locationIds))
-            ->orderBy('name')
-            ->get(['id', 'name', 'legal_entity_id']);
+        $this->authorizeOperator($actor, $request->routeIs('accounting.*'));
+        $accessibleLocations = $this->ledger->locationsFor($actor);
+        $locations = $accessibleLocations->values();
         $selectedLocationId = (int) $request->session()->get(
             'selected_organization_location_id',
             0,
         );
 
-        if ($locations->contains('id', $selectedLocationId)) {
+        if (! $request->routeIs('accounting.*') && $locations->contains('id', $selectedLocationId)) {
             $locations = $locations->where('id', $selectedLocationId)->values();
         }
 
         $locationIds = $locations->modelKeys();
         $legalEntityIds = $locations->pluck('legal_entity_id')->unique();
+        $canManageAccounting = Gate::forUser($actor)->allows('billing-accounting');
+        $accountingLegalEntityId = $accessibleLocations
+            ->firstWhere('id', $selectedLocationId)?->legal_entity_id
+            ?? $accessibleLocations->first()?->legal_entity_id;
+        $accountingFilters = $accountingLegalEntityId === null ? null : [
+            'legal_entity_id' => (int) $accountingLegalEntityId,
+            'location_id' => $selectedLocationId > 0 && $accessibleLocations->contains('id', $selectedLocationId)
+                ? $selectedLocationId
+                : null,
+            'from' => now()->subDays(30)->toDateString(),
+            'to' => now()->toDateString(),
+        ];
+
         return Inertia::render('billing/views/Index', [
             'section' => $request->routeIs('accounting.*') ? 'accounting' : 'operations',
             'invoices' => Invoice::query()
@@ -78,27 +97,71 @@ class BillingController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(),
-            'journalEntries' => Gate::forUser($actor)->allows('billing-accounting')
-                ? JournalEntry::query()->whereIn('legal_entity_id', $legalEntityIds)->with(['lines.account'])->latest('entry_date')->limit(50)->get()
+            'journalEntries' => $canManageAccounting && $accountingFilters !== null
+                ? $this->ledger->entries($accountingFilters, $actor)->limit(50)->get()
                 : [],
-            'accountBalances' => Gate::forUser($actor)->allows('billing-accounting')
-                ? Account::query()
-                    ->whereIn('legal_entity_id', $legalEntityIds)
-                    ->leftJoin('journal_entry_lines', 'accounts.id', '=', 'journal_entry_lines.account_id')
-                    ->select('accounts.id', 'accounts.code', 'accounts.name', 'accounts.type')
-                    ->selectRaw('COALESCE(SUM(journal_entry_lines.debit), 0) AS debits')
-                    ->selectRaw('COALESCE(SUM(journal_entry_lines.credit), 0) AS credits')
-                    ->groupBy('accounts.id', 'accounts.code', 'accounts.name', 'accounts.type')
-                    ->orderBy('accounts.code')
-                    ->get()
+            'accountBalances' => $canManageAccounting && $accountingFilters !== null
+                ? $this->ledger->balances($accountingFilters, $actor)
                 : [],
+            'accountingExport' => $canManageAccounting ? [
+                'filters' => $accountingFilters,
+                'locations' => $accessibleLocations,
+                'legalEntities' => \App\Domains\Organizations\Models\LegalEntity::query()
+                    ->whereIn('id', $accessibleLocations->pluck('legal_entity_id')->unique())
+                    ->orderBy('business_name')
+                    ->get(['id', 'business_name']),
+                'url' => route('accounting.export'),
+            ] : null,
             'permissions' => [
-                'canManageAccounting' => Gate::forUser($actor)->allows('billing-accounting'),
+                'canManageAccounting' => $canManageAccounting,
                 'canIssueInvoices' => Gate::forUser($actor)->allows('billing-invoice'),
                 'canRecordPayments' => Gate::forUser($actor)->allows('billing-payment'),
                 'canOperateCash' => Gate::forUser($actor)->allows('billing-cash'),
                 'canCancelInvoices' => Gate::forUser($actor)->allows('billing-full'),
             ],
+        ]);
+    }
+
+    public function exportAccountingData(ExportAccountingRequest $request): StreamedResponse
+    {
+        $actor = $this->actor($request);
+        $filters = $request->validated();
+        $this->ledger->exportLines($filters, $actor);
+        $this->audit->recordResource(
+            event: 'accounting.ledger_exported',
+            auditableType: JournalEntry::class,
+            afterValues: ['filters' => $filters],
+            actor: $actor,
+            context: AuditContext::fromRequest($request),
+        );
+
+        return response()->streamDownload(function () use ($filters, $actor): void {
+            $stream = fopen('php://output', 'wb');
+            if ($stream === false) {
+                return;
+            }
+
+            fwrite($stream, "\xEF\xBB\xBF");
+            fputcsv($stream, ['Fecha contable', 'Razón social', 'Sede', 'ID asiento', 'ID línea', 'Tipo origen', 'ID origen', 'Código cuenta', 'Nombre cuenta', 'Debe', 'Haber']);
+            $this->ledger->exportLines($filters, $actor)->lazyById(500, 'journal_entry_lines.id', 'line_id')->each(function (object $line) use ($stream): void {
+                fputcsv($stream, array_map(fn (string|int|float|null $value): string => $this->safeCsvValue($value === null ? '' : (string) $value), [
+                    $line->entry_date,
+                    $line->legal_entity_name,
+                    $line->location_name,
+                    $line->journal_entry_id,
+                    $line->line_id,
+                    class_basename($line->source_type),
+                    $line->source_id,
+                    $line->account_code,
+                    $line->account_name,
+                    number_format((float) $line->debit, 2, '.', ''),
+                    number_format((float) $line->credit, 2, '.', ''),
+                ]));
+            });
+            fclose($stream);
+        }, 'libro-diario-'.now()->format('Ymd-His').'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'private, no-store',
         ]);
     }
 
@@ -197,13 +260,18 @@ class BillingController extends Controller
         return $actor;
     }
 
-    private function authorizeOperator(User $actor): void
+    private function authorizeOperator(User $actor, bool $accounting): void
     {
-        Gate::forUser($actor)->authorize('billing-operate');
+        Gate::forUser($actor)->authorize($accounting ? 'billing-accounting' : 'billing-operate');
     }
 
     private function ensureLocation(int $locationId, User $actor): void
     {
         abort_unless($this->scope->canAccessLocation($actor, $locationId), 403);
+    }
+
+    private function safeCsvValue(string $value): string
+    {
+        return Str::startsWith($value, ['=', '+', '-', '@']) ? "'$value" : $value;
     }
 }

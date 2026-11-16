@@ -27,7 +27,7 @@ class UserScopeService
                 ->all();
         }
 
-        $user->loadMissing(['locations:id', 'legalEntities:id']);
+        $user->loadMissing(['locations:id,legal_entity_id', 'legalEntities:id']);
         $directLocationIds = $user->locations->modelKeys();
         $legalEntityLocationIds = Location::query()
             ->whereIn('legal_entity_id', $user->legalEntities->modelKeys())
@@ -63,7 +63,9 @@ class UserScopeService
             return null;
         }
 
-        $user->loadMissing(['legalEntities:id', 'locations:id,legal_entity_id']);
+        // Force the location projection so a previous partial relation load cannot
+        // hide legal_entity_id from the authorization decision.
+        $user->load(['legalEntities:id', 'locations:id,legal_entity_id']);
 
         return array_values(array_unique(array_map(
             fn (mixed $id): int => (int) $id,
