@@ -376,7 +376,7 @@ onUnmounted(() => {
                     : '-translate-x-full'
             "
         >
-            <div class="flex items-center justify-between px-2">
+            <div class="flex shrink-0 items-center justify-between px-2">
                 <BrandMark />
                 <button
                     class="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 lg:hidden"
@@ -387,10 +387,11 @@ onUnmounted(() => {
                 </button>
             </div>
 
-            <div
-                class="mt-7 rounded-2xl border border-clinic-100 bg-clinic-50/80 p-3 dark:border-clinic-900/60 dark:bg-clinic-950/30"
-            >
-                <div ref="organizationSelector" class="relative">
+            <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+                <div
+                    class="mt-7 rounded-2xl border border-clinic-100 bg-clinic-50/80 p-3 dark:border-clinic-900/60 dark:bg-clinic-950/30"
+                >
+                    <div ref="organizationSelector" class="relative">
                     <button
                         type="button"
                         class="flex w-full items-center gap-3 rounded-xl p-1 text-left transition focus-visible:ring-2 focus-visible:ring-clinic-600/40 disabled:cursor-default"
@@ -484,42 +485,43 @@ onUnmounted(() => {
                             </p>
                         </div>
                     </div>
+                    </div>
                 </div>
-            </div>
 
-            <nav class="mt-7 flex flex-1 flex-col gap-1" aria-label="Principal">
-                <p
-                    class="px-3 pb-2 text-[10px] font-bold tracking-[0.16em] text-slate-400 uppercase dark:text-slate-500"
-                >
-                    Gestión
-                </p>
-                <Link
-                    v-for="item in navigation"
-                    :key="item.href"
-                    :href="item.href"
-                    class="group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition"
-                    :class="
-                        isActive(item.href)
-                            ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20'
-                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
-                    "
-                    :aria-current="isActive(item.href) ? 'page' : undefined"
-                >
-                    <BaseIcon
-                        :name="item.icon"
-                        class="size-5 shrink-0"
+                <nav class="mt-7 grid gap-1 pb-4" aria-label="Principal">
+                    <p
+                        class="px-3 pb-2 text-[10px] font-bold tracking-[0.16em] text-slate-400 uppercase dark:text-slate-500"
+                    >
+                        Gestión
+                    </p>
+                    <Link
+                        v-for="item in navigation"
+                        :key="item.href"
+                        :href="item.href"
+                        class="group flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition"
                         :class="
                             isActive(item.href)
-                                ? 'text-white'
-                                : 'text-slate-400 group-hover:text-clinic-600 dark:text-slate-500 dark:group-hover:text-clinic-300'
+                                ? 'bg-clinic-600 text-white shadow-md shadow-clinic-600/20'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white'
                         "
-                    />
-                    <span>{{ item.label }}</span>
-                </Link>
-            </nav>
+                        :aria-current="isActive(item.href) ? 'page' : undefined"
+                    >
+                        <BaseIcon
+                            :name="item.icon"
+                            class="size-5 shrink-0"
+                            :class="
+                                isActive(item.href)
+                                    ? 'text-white'
+                                    : 'text-slate-400 group-hover:text-clinic-600 dark:text-slate-500 dark:group-hover:text-clinic-300'
+                            "
+                        />
+                        <span>{{ item.label }}</span>
+                    </Link>
+                </nav>
+            </div>
 
             <div
-                class="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60"
+                class="mt-4 shrink-0 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60"
             >
                 <div class="flex items-center gap-3">
                     <span

@@ -38,6 +38,47 @@
 
     body {
         @apply min-w-80 text-slate-900 dark:text-slate-100;
+
+        scrollbar-color: var(--color-clinic-300) transparent;
+        scrollbar-width: thin;
+    }
+
+    *::-webkit-scrollbar {
+        width: 0.625rem;
+        height: 0.625rem;
+    }
+
+    *::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+        background: var(--color-clinic-300);
+        border: 0.1875rem solid transparent;
+        border-radius: 9999px;
+        background-clip: padding-box;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+        background: var(--color-clinic-500);
+        border-color: transparent;
+        background-clip: padding-box;
+    }
+
+    :root.dark * {
+        scrollbar-color: var(--color-clinic-700) transparent;
+    }
+
+    :root.dark *::-webkit-scrollbar-thumb {
+        background: var(--color-clinic-700);
+        border-color: transparent;
+        background-clip: padding-box;
+    }
+
+    :root.dark *::-webkit-scrollbar-thumb:hover {
+        background: var(--color-clinic-400);
+        border-color: transparent;
+        background-clip: padding-box;
     }
 
     button,
