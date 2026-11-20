@@ -5,7 +5,8 @@ namespace App\Domains\Auth\Requests;
 use App\Domains\Users\Enums\UserStatus;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Support\Facades\Auth;
+use App\Domains\Users\Models\User;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -29,11 +30,16 @@ class LoginRequest extends FormRequest
         ];
     }
 
-    public function authenticate(): void
+    public function authenticate(): User
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        $user = User::query()
+            ->with(['role', 'patient'])
+            ->where('email', Str::lower($this->string('email')->toString()))
+            ->first();
+
+        if (! $user || ! Hash::check($this->string('password')->toString(), $user->password)) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -41,15 +47,7 @@ class LoginRequest extends FormRequest
             ]);
         }
 
-        $user = Auth::user();
-        $user?->loadMissing(['role', 'patient']);
-
-        if (
-            $user === null
-            || $user->status !== UserStatus::Active
-            || ! $user->canAccessApplication()
-        ) {
-            Auth::logout();
+        if ($user->status !== UserStatus::Active || ! $user->canAccessApplication()) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
@@ -58,6 +56,8 @@ class LoginRequest extends FormRequest
         }
 
         RateLimiter::clear($this->throttleKey());
+
+        return $user;
     }
 
     public function ensureIsNotRateLimited(): void

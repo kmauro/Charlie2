@@ -5,6 +5,7 @@ namespace App\Domains\Auth\Controllers;
 use App\Domains\Audits\Data\AuditContext;
 use App\Domains\Audits\Services\AuditService;
 use App\Domains\Auth\Requests\LoginRequest;
+use App\Domains\Auth\Services\MfaService;
 use App\Domains\Users\Models\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +19,7 @@ class AuthenticatedSessionController extends Controller
 {
     public function __construct(
         private AuditService $audit,
+        private MfaService $mfa,
     ) {}
 
     public function create(): Response
@@ -28,7 +30,7 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         try {
-            $request->authenticate();
+            $user = $request->authenticate();
         } catch (ValidationException $exception) {
             $context = AuditContext::fromRequest($request);
             $attemptedUser = User::query()
@@ -50,9 +52,15 @@ class AuthenticatedSessionController extends Controller
 
             throw $exception;
         }
-        $request->session()->regenerate();
+        if ($user->mfaFactor?->isConfirmed()) {
+            $this->mfa->beginChallenge($user, $request->boolean('remember'));
 
-        $user = $request->user();
+            return redirect()->route('mfa.challenge.create');
+        }
+
+        Auth::login($user, $request->boolean('remember'));
+        $request->session()->regenerate();
+        $request->session()->put('mfa.setup_prompt', true);
 
         if ($user instanceof User) {
             $user->forceFill(['last_login_at' => now()])->saveQuietly();
@@ -64,7 +72,7 @@ class AuthenticatedSessionController extends Controller
             );
         }
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended(route('account.security.prompt', absolute: false));
     }
 
     public function destroy(Request $request): RedirectResponse

@@ -3,6 +3,9 @@
 namespace App\Domains\Users\Models;
 
 use App\Domains\Audits\Models\AuditLog;
+use App\Domains\Auth\Models\MfaFactor;
+use App\Domains\Auth\Models\MfaRecoveryCode;
+use App\Domains\Auth\Models\MfaTrustedDevice;
 use App\Domains\Auth\Notifications\ResetPasswordNotification;
 use App\Domains\Organizations\Models\LegalEntity;
 use App\Domains\Organizations\Models\Location;
@@ -78,6 +81,24 @@ class User extends Authenticatable
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class, 'actor_id');
+    }
+
+    /** @return HasOne<MfaFactor, $this> */
+    public function mfaFactor(): HasOne
+    {
+        return $this->hasOne(MfaFactor::class);
+    }
+
+    /** @return HasMany<MfaRecoveryCode, $this> */
+    public function mfaRecoveryCodes(): HasMany
+    {
+        return $this->hasMany(MfaRecoveryCode::class);
+    }
+
+    /** @return HasMany<MfaTrustedDevice, $this> */
+    public function mfaTrustedDevices(): HasMany
+    {
+        return $this->hasMany(MfaTrustedDevice::class);
     }
 
     public function hasRole(RoleCode $role): bool

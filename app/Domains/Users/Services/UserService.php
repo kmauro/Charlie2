@@ -4,6 +4,7 @@ namespace App\Domains\Users\Services;
 
 use App\Domains\Audits\Data\AuditContext;
 use App\Domains\Audits\Services\AuditService;
+use App\Domains\Auth\Services\MfaService;
 use App\Domains\Users\Data\InvitationResult;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
@@ -27,6 +28,7 @@ class UserService
         private UserRepository $users,
         private RoleRepository $roles,
         private AuditService $audit,
+        private MfaService $mfa,
     ) {}
 
     /**
@@ -126,6 +128,7 @@ class UserService
         return DB::transaction(function () use ($user, $attributes, $data): User {
             $this->users->lockActiveByRole(RoleCode::SuperAdmin);
             $lockedUser = $this->users->findForUpdate((int) $user->getKey());
+            $lockedUser->load('role');
             $nextRole = $this->roles->find((int) $attributes['role_id']);
             $attributes['permissions'] = $this->validatedPermissions(
                 $nextRole->code,
@@ -157,7 +160,11 @@ class UserService
                 ]);
             }
 
+            $mfaWasRequired = $this->mfa->isRequiredFor($lockedUser);
             $updatedUser = $this->users->update($lockedUser, $attributes);
+            if ($mfaWasRequired || $this->mfa->isRequiredFor($updatedUser)) {
+                $this->mfa->revoke($updatedUser, Auth::user() instanceof User ? Auth::user() : null);
+            }
             $this->syncOrganizationalScope($updatedUser, $nextRole->code, $data);
             $this->recordUserEvent('user.updated', $updatedUser);
 
@@ -233,6 +240,8 @@ class UserService
             'invitation_token_hash' => null,
             'invitation_expires_at' => null,
         ]);
+
+        $this->mfa->revoke($suspendedUser, Auth::user() instanceof User ? Auth::user() : null);
 
         $this->recordUserEvent('user.suspended', $suspendedUser);
 

@@ -4,10 +4,14 @@ use App\Domains\Appointments\Controllers\AppointmentController;
 use App\Domains\Appointments\Controllers\AppointmentWaitlistController;
 use App\Domains\Audits\Controllers\AuditLogController;
 use App\Domains\Auth\Controllers\AuthenticatedSessionController;
+use App\Domains\Auth\Controllers\AccountSettingsController;
 use App\Domains\Auth\Controllers\NewPasswordController;
+use App\Domains\Auth\Controllers\MfaChallengeController;
+use App\Domains\Auth\Controllers\MfaEnrollmentController;
 use App\Domains\Auth\Controllers\PasswordResetLinkController;
 use App\Domains\Auth\Controllers\RegisteredUserController;
 use App\Domains\Auth\Middleware\EnsureUserIsActive;
+use App\Domains\Auth\Middleware\EnsureMfaIsVerified;
 use App\Domains\Dashboard\Controllers\DashboardController;
 use App\Domains\ExternalClinicalRecords\Controllers\ExternalClinicalRecordController;
 use App\Domains\Organizations\Controllers\LegalEntityController;
@@ -29,6 +33,13 @@ Route::redirect('/', '/login');
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
+    Route::get('/verificacion-mfa', [MfaChallengeController::class, 'create'])->name('mfa.challenge.create');
+    Route::post('/verificacion-mfa', [MfaChallengeController::class, 'store'])->middleware('throttle:10,1')->name('mfa.challenge.store');
+    Route::post('/verificacion-mfa/recuperacion', [MfaChallengeController::class, 'useRecoveryCode'])->middleware('throttle:10,1')->name('mfa.challenge.recovery');
+    Route::get('/configurar-mfa', [MfaEnrollmentController::class, 'create'])->name('mfa.enrollment.create');
+    Route::post('/configurar-mfa', [MfaEnrollmentController::class, 'store'])->middleware('throttle:10,1')->name('mfa.enrollment.store');
+    Route::get('/configurar-mfa/codigos', [MfaEnrollmentController::class, 'recoveryCodes'])->name('mfa.recovery-codes.show');
+    Route::post('/configurar-mfa/codigos', [MfaEnrollmentController::class, 'finish'])->name('mfa.recovery-codes.finish');
     Route::get('/recuperar-contrasena', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
     Route::post('/recuperar-contrasena', [PasswordResetLinkController::class, 'store'])
@@ -49,8 +60,16 @@ Route::middleware('guest')->group(function (): void {
         ->name('register.store');
 });
 
-Route::middleware(['auth', EnsureUserIsActive::class])->group(function (): void {
+Route::middleware(['auth', EnsureUserIsActive::class, EnsureMfaIsVerified::class])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::get('/mi-cuenta', [AccountSettingsController::class, 'edit'])->name('account.settings');
+    Route::put('/mi-cuenta', [AccountSettingsController::class, 'update'])->name('account.settings.update');
+    Route::get('/configurar-seguridad', fn () => redirect()->route('account.settings'))->name('account.security.prompt');
+    Route::post('/configurar-seguridad/omitir', [AccountSettingsController::class, 'skipMfaPrompt'])->name('account.security.skip');
+    Route::get('/mi-cuenta/2fa/configurar', [MfaEnrollmentController::class, 'create'])->name('account.mfa.enrollment.create');
+    Route::post('/mi-cuenta/2fa/configurar', [MfaEnrollmentController::class, 'store'])->middleware('throttle:10,1')->name('account.mfa.enrollment.store');
+    Route::get('/mi-cuenta/2fa/codigos', [MfaEnrollmentController::class, 'recoveryCodes'])->name('account.mfa.recovery-codes.show');
+    Route::post('/mi-cuenta/2fa/codigos', [MfaEnrollmentController::class, 'finish'])->name('account.mfa.recovery-codes.finish');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
     Route::post('/contexto-organizacion', [OrganizationContextController::class, 'store'])
         ->name('organization-context.store');

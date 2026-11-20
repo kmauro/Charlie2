@@ -626,6 +626,13 @@ onUnmounted(() => {
                                 class="absolute top-12 right-0 w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-800"
                             >
                                 <Link
+                                    href="/mi-cuenta"
+                                    class="mb-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
+                                >
+                                    <BaseIcon name="settings" class="size-4" />
+                                    Ajustes de cuenta
+                                </Link>
+                                <Link
                                     href="/logout"
                                     method="post"
                                     as="button"

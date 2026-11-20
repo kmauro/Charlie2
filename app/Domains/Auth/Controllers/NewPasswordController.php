@@ -3,6 +3,7 @@
 namespace App\Domains\Auth\Controllers;
 
 use App\Domains\Auth\Requests\ResetPasswordRequest;
+use App\Domains\Auth\Services\MfaService;
 use App\Domains\Users\Models\User;
 use App\Http\Controllers\Controller;
 use Illuminate\Auth\Events\PasswordReset;
@@ -25,7 +26,7 @@ class NewPasswordController extends Controller
         ]);
     }
 
-    public function store(ResetPasswordRequest $request): RedirectResponse
+    public function store(ResetPasswordRequest $request, MfaService $mfa): RedirectResponse
     {
         $credentials = $request->validated();
         $user = User::query()
@@ -41,11 +42,13 @@ class NewPasswordController extends Controller
 
         $status = Password::reset(
             $credentials,
-            function (User $user, string $password): void {
+            function (User $user, string $password) use ($mfa): void {
                 $user->forceFill([
                     'password' => Hash::make($password),
                     'remember_token' => Str::random(60),
                 ])->save();
+
+                $mfa->revoke($user);
 
                 event(new PasswordReset($user));
             },
