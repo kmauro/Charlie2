@@ -212,6 +212,9 @@ class BillingService
             if ($method->requires_reference && blank($data['reference'] ?? null)) {
                 throw ValidationException::withMessages(['reference' => 'Este medio de pago requiere una referencia.']);
             }
+            if ($method->kind !== 'cash' && $method->financial_account_id === null) {
+                throw ValidationException::withMessages(['payment_method_id' => 'El medio de pago debe tener un destino financiero activo.']);
+            }
 
             $cashRegister = null;
             if ($method->kind === 'cash') {
@@ -225,6 +228,8 @@ class BillingService
                 'invoice_id' => $invoice->getKey(),
                 'cash_register_id' => $cashRegister?->getKey(),
                 'payment_method_id' => $method->getKey(),
+                'payment_method_name' => $method->name,
+                'financial_account_id' => $method->financial_account_id,
                 'received_by' => $actor->getKey(),
                 'amount' => $amount,
                 'reference' => $data['reference'] ?? null,

@@ -24,6 +24,7 @@ use App\Domains\Professionals\Controllers\OperationalAgendaController;
 use App\Domains\Professionals\Controllers\ProfessionalController;
 use App\Domains\Users\Controllers\UserController;
 use App\Http\Controllers\Domains\Billing\Controllers\BillingController;
+use App\Http\Controllers\Domains\Billing\Controllers\FinancialStatementImportController;
 use App\Http\Controllers\Domains\Coverages\Controllers\CoverageController;
 use App\Http\Controllers\Domains\Organizations\OrganizationContextController;
 use Illuminate\Support\Facades\Route;
@@ -93,6 +94,7 @@ Route::controller(BillingController::class)->prefix('facturacion')->name('billin
         Route::get('/', 'index')->name('index');
         Route::get('/exportar', 'exportAccountingData')->name('export');
     });
+    Route::post('/contabilidad/cuentas-financieras/{financialAccount}/extractos', [FinancialStatementImportController::class, 'store'])->name('accounting.statements.store');
 
     Route::controller(CoverageController::class)->prefix('coberturas')->name('coverages.')->group(function (): void {
         Route::get('/', 'index')->name('index');

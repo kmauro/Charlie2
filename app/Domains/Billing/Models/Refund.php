@@ -12,7 +12,7 @@ class Refund extends Model
     /** @use HasFactory<RefundFactory> */
     use HasFactory;
 
-    protected $fillable = ['invoice_id', 'requested_by', 'authorized_by', 'registered_by', 'payment_method_id', 'cash_register_id', 'amount', 'reference', 'reason', 'status', 'authorized_at', 'registered_at'];
+    protected $fillable = ['invoice_id', 'requested_by', 'authorized_by', 'registered_by', 'payment_method_id', 'payment_method_name', 'financial_account_id', 'cash_register_id', 'amount', 'reference', 'reason', 'status', 'authorized_at', 'registered_at'];
 
     /** @return BelongsTo<Invoice, $this> */
     public function invoice(): BelongsTo
