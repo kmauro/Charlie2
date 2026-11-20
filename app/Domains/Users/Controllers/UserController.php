@@ -76,8 +76,8 @@ class UserController extends Controller
         return Inertia::render('users/views/Edit', [
             'user' => $this->userData($user),
             'roles' => $this->roleOptions(
-                fixedRole: $user->role?->code === RoleCode::Professional
-                    ? RoleCode::Professional
+                fixedRole: in_array($user->role?->code, [RoleCode::Professional, RoleCode::Patient], true)
+                    ? $user->role->code
                     : null,
             ),
             'permissionOptions' => UserPermission::options(),
@@ -143,7 +143,7 @@ class UserController extends Controller
             ->when(
                 $fixedRole === null && ! $includeProfessional,
                 fn ($roles) => $roles->reject(
-                    fn (Role $role): bool => $role->code === RoleCode::Professional,
+                    fn (Role $role): bool => in_array($role->code, [RoleCode::Professional, RoleCode::Patient], true),
                 ),
             )
             ->values()

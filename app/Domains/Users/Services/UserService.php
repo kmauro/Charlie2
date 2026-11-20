@@ -61,7 +61,7 @@ class UserService
         return $this->createInvitation([
             ...Arr::except($data, ['role_id', 'role_code']),
             'role_code' => RoleCode::Patient,
-        ], allowProfessionalRole: false);
+        ], allowProfessionalRole: false, allowPatientRole: true);
     }
 
     /**
@@ -70,6 +70,7 @@ class UserService
     private function createInvitation(
         array $data,
         bool $allowProfessionalRole,
+        bool $allowPatientRole = false,
     ): InvitationResult {
         $role = array_key_exists('role_id', $data)
             ? $this->roles->find((int) $data['role_id'])
@@ -78,6 +79,12 @@ class UserService
         if ($role->code === RoleCode::Professional && ! $allowProfessionalRole) {
             throw ValidationException::withMessages([
                 'role_id' => 'Los profesionales deben darse de alta desde el módulo Profesionales.',
+            ]);
+        }
+
+        if ($role->code === RoleCode::Patient && ! $allowPatientRole) {
+            throw ValidationException::withMessages([
+                'role_id' => 'Los pacientes deben darse de alta desde el módulo Pacientes.',
             ]);
         }
 
@@ -130,6 +137,17 @@ class UserService
             $lockedUser = $this->users->findForUpdate((int) $user->getKey());
             $lockedUser->load('role');
             $nextRole = $this->roles->find((int) $attributes['role_id']);
+            if ($nextRole->code === RoleCode::Patient && ! $lockedUser->hasRole(RoleCode::Patient)) {
+                throw ValidationException::withMessages([
+                    'role_id' => 'Los pacientes deben darse de alta desde el módulo Pacientes.',
+                ]);
+            }
+
+            if ($nextRole->code !== $lockedUser->role?->code && $lockedUser->patient()->exists()) {
+                throw ValidationException::withMessages([
+                    'role_id' => 'El rol no puede cambiarse mientras exista una ficha de paciente asociada.',
+                ]);
+            }
             $attributes['permissions'] = $this->validatedPermissions(
                 $nextRole->code,
                 $attributes['permissions'] ?? [],

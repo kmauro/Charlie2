@@ -2,6 +2,7 @@
 
 use App\Domains\Professionals\Enums\ProfessionalStatus;
 use App\Domains\Professionals\Models\Professional;
+use App\Domains\Patients\Models\Patient;
 use App\Domains\Users\Enums\RoleCode;
 use App\Domains\Users\Enums\UserPermission;
 use App\Domains\Users\Enums\UserStatus;
@@ -104,7 +105,7 @@ it('renders the user create and edit screens with their form props', function ()
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->component('users/views/Create')
-            ->has('roles', count(RoleCode::cases()) - 1)
+            ->has('roles', count(RoleCode::cases()) - 2)
             ->has('permissionOptions', count(UserPermission::cases())));
 
     $this->get(route('users.edit', $target))
@@ -113,8 +114,47 @@ it('renders the user create and edit screens with their form props', function ()
             ->component('users/views/Edit')
             ->where('user.id', $target->getKey())
             ->where('user.email', $target->email)
-            ->has('roles', count(RoleCode::cases()) - 1)
+            ->has('roles', count(RoleCode::cases()) - 2)
             ->has('permissionOptions', count(UserPermission::cases())));
+});
+
+it('requires patient accounts to be created from the patients module and protects linked roles', function () {
+    $actor = usersSuperAdmin();
+    $patientRole = usersRole(RoleCode::Patient);
+    $target = User::factory()->create();
+
+    $this->actingAs($actor)
+        ->post(route('users.store'), validUserInvitationPayload([
+            'email' => 'patient-role@clinica.test',
+            'role_id' => $patientRole->getKey(),
+        ]))->assertSessionHasErrors('role_id');
+
+    $this->assertDatabaseMissing('users', ['email' => 'patient-role@clinica.test']);
+
+    $this->put(route('users.update', $target), [
+        'name' => $target->name,
+        'email' => $target->email,
+        'role_id' => $patientRole->getKey(),
+        'permissions' => [],
+    ])->assertSessionHasErrors('role_id');
+
+    $patientUser = User::factory()->create(['role_id' => $patientRole->getKey()]);
+    Patient::factory()->create(['user_id' => $patientUser->getKey()]);
+
+    $this->get(route('users.edit', $patientUser))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('roles', 1)
+            ->where('roles.0.code', RoleCode::Patient->value));
+
+    $this->put(route('users.update', $patientUser), [
+        'name' => $patientUser->name,
+        'email' => $patientUser->email,
+        'role_id' => usersRole(RoleCode::Reception)->getKey(),
+        'permissions' => [],
+    ])->assertSessionHasErrors('role_id');
+
+    expect($patientUser->refresh()->role->code)->toBe(RoleCode::Patient);
 });
 
 it('keeps the professional role fixed when editing a linked professional account', function () {
