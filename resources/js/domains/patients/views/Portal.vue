@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import BrandMark from '@/shared/components/BrandMark.vue';
+import BaseIcon from '@/shared/components/BaseIcon.vue';
 import FieldError from '@/shared/components/FieldError.vue';
 import FlashMessage from '@/shared/components/FlashMessage.vue';
+import { useTheme } from '@/shared/composables/useTheme';
 import type { AppFlashData } from '@/shared/types/inertia';
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -27,6 +29,7 @@ const props = defineProps<{
 }>();
 
 const page = usePage();
+const { isDark, toggleTheme } = useTheme();
 const flash = computed<AppFlashData>(() => page.props.flash ?? {});
 const form = useForm({
     phone: props.patient.phone ?? '',
@@ -48,9 +51,18 @@ const submit = (): void => form.put('/portal/perfil', { preserveScroll: true });
     <Head title="Mi portal" />
     <div class="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-white">
         <header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
+            <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
                 <BrandMark />
                 <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        class="grid size-10 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clinic-600 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                        :aria-label="isDark ? 'Activar modo claro' : 'Activar modo oscuro'"
+                        :title="isDark ? 'Activar modo claro' : 'Activar modo oscuro'"
+                        @click="toggleTheme"
+                    >
+                        <BaseIcon :name="isDark ? 'sun' : 'moon'" class="size-5" />
+                    </button>
                     <Link href="/turnos" class="inline-flex min-h-10 items-center rounded-xl px-3 text-sm font-semibold text-clinic-700 hover:bg-clinic-50 dark:text-clinic-300 dark:hover:bg-clinic-950/40">Mis turnos</Link>
                     <Link href="/logout" method="post" as="button" class="inline-flex min-h-10 items-center rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Salir</Link>
                 </div>
